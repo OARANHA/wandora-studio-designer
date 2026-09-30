@@ -1,10 +1,10 @@
-import { resetPieces, renderBrand, renderSite, renderPosts, renderEmail, renderAds } from './render.mjs';
+import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderEmail, renderAds } from './render.mjs';
 const $ = (s) => document.querySelector(s);
 const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), providers=$('#providers');
 const projectSelect=$('#project-select'), projectName=$('#project-name'), clientName=$('#client-name');
-const createProjectBtn=$('#create-project'), saveVersionBtn=$('#save-version'), openVersionsBtn=$('#open-versions');
+const createProjectBtn=$('#create-project'), saveVersionBtn=$('#save-version'), openVersionsBtn=$('#open-versions'), generateCopyBtn=$('#generate-copy');
 const versionsDialog=$('#versions-dialog'), versionsList=$('#versions-list');
-let activeController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false;
+let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, copyGenerating=false;
 const labels={seg:'Segmento',pers:'Personalidade',pub:'Público',obj:'Objetivo',canal:'Canal',preco:'Preço',mat:'Maturidade',dif:'Diferencial',oferta:'Oferta',emoji:'Emojis'};
 const channel={entender:$('#ch-entender'),site:$('#ch-site'),marca:$('#ch-marca'),posts:$('#ch-posts'),email:$('#ch-email'),anuncios:$('#ch-anuncios')};
 const signal={site:$('#signal-site'),marca:$('#brand-signal'),posts:$('#signal-posts'),email:$('#signal-email'),anuncios:$('#signal-anuncios')};
@@ -50,13 +50,21 @@ function resetSignals(){
 function refreshProjectButtons(){
   openVersionsBtn.disabled=!activeProject;
   saveVersionBtn.disabled=!activeProject || !latestComplete;
+  generateCopyBtn.disabled=!latestComplete || !nvidiaReady || copyGenerating;
 }
 async function json(url,opts={}){
   const r=await fetch(url,{...opts,headers:{'content-type':'application/json',...(opts.headers||{})}});
   const d=await r.json(); if(!r.ok)throw Object.assign(new Error(d.error||'Erro'),{data:d,status:r.status}); return d;
 }
 async function loadConfig(){
-  try{const c=await json('/api/config');providers.textContent=`JEV ${c.providers.jev.configured?'●':'○'} · NVIDIA ${c.providers.nvidia.configured?'●':'○'} · ${c.total} decisões`;providers.classList.toggle('ready',c.providers.jev.configured&&c.providers.nvidia.configured);}catch{providers.textContent='IA indisponível';}
+  try{
+    const c=await json('/api/config');
+    nvidiaReady=!!c.providers.nvidia.configured;
+    providers.textContent=`JEV ${c.providers.jev.configured?'●':'○'} · NVIDIA ${nvidiaReady?'●':'○'} · ${c.total} decisões`;
+    providers.classList.toggle('ready',c.providers.jev.configured&&nvidiaReady);
+    generateCopyBtn.title=nvidiaReady?`NVIDIA · ${c.providers.nvidia.model}`:'Configure NVIDIA_API_KEY no servidor';
+    refreshProjectButtons();
+  }catch{providers.textContent='IA indisponível';nvidiaReady=false;refreshProjectButtons();}
 }
 async function loadProjects(selectId=null){
   const d=await json('/api/projects');
@@ -119,6 +127,51 @@ async function restoreVersion(id){
     status.textContent=`Versão ${v.number} restaurada${latestComplete?' com 89 decisões':''}.`;
   }catch(e){status.textContent=e.message;}
 }
+function copyShape(fields={}){
+  const first=(v)=>String(v||'').split(/\n|[.!?](?:\s|$)/)[0].trim().slice(0,86);
+  return {
+    brand:{slogan:fields.slogan||''},
+    site:{headline:fields.titulo||'',subheadline:fields.subtitulo||''},
+    posts:{
+      presentation:{title:first(fields.legenda1),caption:fields.legenda1||''},
+      sales:{title:first(fields.legenda2),caption:fields.legenda2||''},
+      relationship:{title:first(fields.legenda3),caption:fields.legenda3||''},
+    },
+    email:{subject:fields.assunto||'',preheader:fields.preheader||'',preview:fields.email||fields.preheader||''},
+    ads:{headline:fields.anuncio||''},
+    about:fields.sobre||'',
+  };
+}
+async function generateCopy(){
+  if(!latestComplete){status.textContent='Conclua as 89 decisões antes de escrever os textos.';return;}
+  if(!nvidiaReady){status.textContent='Configure NVIDIA_API_KEY no servidor para escrever os textos.';return;}
+  copyController?.abort(); copyController=new AbortController(); const controller=copyController;
+  copyGenerating=true; refreshProjectButtons(); generateCopyBtn.textContent='NVIDIA ESCREVENDO…'; status.textContent='NVIDIA preparando 11 textos…';
+  try{
+    const r=await fetch('/api/escrever',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({texto:briefing.value,decisoes:latestDecisions}),signal:controller.signal});
+    await readSse(r,(event,d)=>{
+      if(controller!==copyController)return;
+      if(event==='inicio') status.textContent=`NVIDIA · ${d.model} · iniciando…`;
+      if(event==='tok' && d.fields){
+        latestCopy=copyShape(d.fields);
+        renderAll(latestDecisions,latestCopy);
+        const n=Object.values(d.fields).filter(Boolean).length;
+        status.textContent=`NVIDIA escrevendo… ${n}/11 campos`;
+      }
+      if(event==='fim'){
+        latestCopy=copyShape(d.fields||{});
+        renderAll(latestDecisions,latestCopy);
+        status.textContent=d.complete?`11 textos prontos · primeira palavra em ${d.first_token_ms??'—'} ms · total ${d.ms} ms`:`NVIDIA terminou com ${Object.values(d.fields||{}).filter(Boolean).length}/11 campos.`;
+      }
+      if(event==='erro') throw Object.assign(new Error(d.error||'Falha da NVIDIA.'),{code:d.code});
+    });
+  }catch(e){
+    if(e.name!=='AbortError') status.textContent=e.message;
+  }finally{
+    if(controller===copyController){copyGenerating=false;generateCopyBtn.textContent='TEXTOS NVIDIA';refreshProjectButtons();}
+  }
+}
+
 async function readSse(response,onEvent){
   if(!response.ok){let d={};try{d=await response.json();}catch{}throw new Error(d.error||`HTTP ${response.status}`);}
   const reader=response.body.getReader(), decoder=new TextDecoder(); let buffer='';
@@ -128,6 +181,7 @@ async function readSse(response,onEvent){
   }
 }
 async function analyze(){
+  copyController?.abort(); copyGenerating=false;
   const texto=briefing.value.trim(); if(texto.split(/\s+/).length<2){status.textContent='Escreva pelo menos algumas palavras sobre o negócio.';return;}
   activeController?.abort(); activeController=new AbortController(); const controller=activeController;
   latestDecisions={}; latestCopy={}; latestComplete=false; refreshProjectButtons();
@@ -157,4 +211,5 @@ createProjectBtn.addEventListener('click',createProject);
 projectSelect.addEventListener('change',selectProject);
 saveVersionBtn.addEventListener('click',saveVersion);
 openVersionsBtn.addEventListener('click',openVersions);
+generateCopyBtn.addEventListener('click',generateCopy);
 await Promise.all([loadConfig(),loadProjects()]);
