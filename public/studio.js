@@ -1,3 +1,4 @@
+import { resetPieces, renderBrand, renderSite, renderPosts, renderEmail, renderAds } from './render.mjs';
 const $ = (s) => document.querySelector(s);
 const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), providers=$('#providers');
 const projectSelect=$('#project-select'), projectName=$('#project-name'), clientName=$('#client-name');
@@ -24,7 +25,7 @@ function setSignal(group,text,on=false){
   el.textContent=text; el.classList.toggle('signal-on',on);
 }
 function renderUnderstanding(answers){
-  const root=$('#understanding'); root.className='identity-result'; root.replaceChildren();
+  const root=$('#understanding-summary'); root.hidden=false; root.className='understanding-summary'; root.replaceChildren();
   for(const [id,a] of Object.entries(answers||{})){
     const row=document.createElement('div'), name=document.createElement('span'), value=document.createElement('b');
     name.textContent=labels[id]||id; value.textContent=answerText(a); row.append(name,value); root.append(row);
@@ -34,10 +35,14 @@ function renderGroupSummary(group,answers,ms=0){
   const count=Object.keys(answers||{}).length;
   if(group==='entender'){ renderUnderstanding(answers); return; }
   setSignal(group,ms?`${count} decisões · ${ms} ms`:`${count} decisões`,true);
+  const draw={site:renderSite,marca:renderBrand,posts:renderPosts,email:renderEmail,anuncios:renderAds}[group];
+  draw?.(latestDecisions,latestCopy);
 }
 function resetSignals(){
   latestDecisions={}; latestCopy={}; latestComplete=false;
   saveVersionBtn.disabled=true;
+  resetPieces();
+  const summary=$('#understanding-summary'); summary.hidden=true; summary.replaceChildren();
   Object.keys(channel).forEach(g=>setChannel(g,''));
   Object.keys(signal).forEach(g=>setSignal(g,'sem sinal',false));
   $('#decisoes').textContent='0'; $('#latencia').textContent='—';
