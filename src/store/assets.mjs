@@ -13,7 +13,7 @@ const TYPES=new Map([
   ['video/mp4',{ext:'mp4',magic:(b)=>b.length>12&&b.subarray(4,8).toString()==='ftyp'}],
 ]);
 const MAX_ASSETS=60;
-const MAX_BYTES=8_000_000;
+const MAX_BYTES=32_000_000;
 let queue=Promise.resolve();
 
 const clean=(v,max=160)=>String(v??'').replace(/[\u0000-\u001f]+/g,' ').replace(/\s+/g,' ').trim().slice(0,max);
@@ -32,7 +32,7 @@ function verify(type,buffer){
   const spec=TYPES.get(type);
   if(!spec)throw new HttpError(415,'Formato não suportado. Use PNG, JPG ou WEBP.','unsupported_asset_type');
   if(!Buffer.isBuffer(buffer)||buffer.length<16||!spec.magic(buffer))throw new HttpError(400,'O conteúdo do arquivo não corresponde ao formato informado.','bad_asset');
-  if(buffer.length>MAX_BYTES)throw new HttpError(413,'Ativo grande demais. Limite de 8 MB.','asset_too_large');
+  if(buffer.length>MAX_BYTES)throw new HttpError(413,'Ativo grande demais. Limite de 32 MB.','asset_too_large');
   return spec;
 }
 export async function listAssets(owner,projectId){
