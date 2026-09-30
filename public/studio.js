@@ -1,7 +1,7 @@
 import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderEmail, renderAds } from './render.mjs';
 import { sampleGoodVariants, restoreJevChoices } from './variation.mjs';
 import { buildSiteHtml, buildEmailHtml, buildSignatureHtml, buildAdsHtml, buildProjectJson, downloadText, slugify } from './export.mjs';
-import { createDecisionScheduler, createSignalCables, createVoiceMeter } from './live.mjs';
+import { createBackendVoiceCapture, createDecisionScheduler, createSignalCables, mergeTranscriptText } from './live.mjs';
 const $ = (s) => document.querySelector(s);
 const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), providers=$('#providers');
 const projectSelect=$('#project-select'), projectName=$('#project-name'), clientName=$('#client-name');
@@ -13,7 +13,7 @@ const exportDialog=$('#export-dialog'), exportSiteBtn=$('#export-site'), exportE
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
 const voiceDiag=$('#voice-diag'), voiceStages=Object.fromEntries([...voiceDiag.querySelectorAll('[data-stage]')].map(el=>[el.dataset.stage,el]));
-let recognition=null, micListening=false, micWanted=false, micBaseText='', micFinalText='', micInterimText='', voiceMeter=null, liveUpdateCount=0;
+let micListening=false, micWanted=false, micBaseText='', micFinalText='', micInterimText='', voiceCapture=null, voiceSession=0, liveUpdateCount=0;
 const labels={seg:'Segmento',pers:'Personalidade',pub:'Público',obj:'Objetivo',canal:'Canal',preco:'Preço',mat:'Maturidade',dif:'Diferencial',oferta:'Oferta',emoji:'Emojis'};
 const channel={entender:$('#ch-entender'),site:$('#ch-site'),marca:$('#ch-marca'),posts:$('#ch-posts'),email:$('#ch-email'),anuncios:$('#ch-anuncios')};
 const signal={site:$('#signal-site'),marca:$('#brand-signal'),posts:$('#signal-posts'),email:$('#signal-email'),anuncios:$('#signal-anuncios')};
@@ -474,154 +474,106 @@ function closeTranscript(){
   briefingLabel.classList.remove('is-listening');
   liveTranscript.hidden=true;
 }
-async function startVoiceMeter(){
-  voiceMeter?.stop?.(); voiceMeter=null;
+async function transcribeVoiceSegment(wav,{durationMs=0,forced=false,session}={}){
+  if(session!==voiceSession)return;
+  voiceStage('text','active',`Transcrevendo ${Math.round(durationMs)} ms`);
+  status.textContent=forced?'🎙️ Transcrevendo enquanto você continua falando…':'🎙️ Transcrevendo a última fala…';
   try{
-    const meter=await createVoiceMeter(vuEl);
-    if(!micWanted)meter?.stop?.(); else voiceMeter=meter;
-  }catch{}
+    const r=await fetch('/api/transcribe',{
+      method:'POST',
+      headers:{'content-type':'audio/wav'},
+      body:wav,
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw Object.assign(new Error(d.error||`Falha na transcrição (${r.status})`),{code:d.code,status:r.status});
+    if(session!==voiceSession)return;
+    const text=String(d.text||'').replace(/\s+/g,' ').trim();
+    if(!text){
+      voiceStage('text','active','Trecho sem palavras reconhecidas');
+      status.textContent='🎙️ Ouvindo… continue falando.';
+      return;
+    }
+    micFinalText=mergeTranscriptText(micFinalText,text);
+    micInterimText='';
+    const spoken=micFinalText.trim();
+    briefing.value=[micBaseText,spoken].filter(Boolean).join(micBaseText&&spoken?'\n':'').slice(0,3000);
+    paintTranscript();
+    voiceStage('text','ok',`NVIDIA ASR · ${d.ms||0} ms`);
+    status.textContent=`✓ Texto recebido em ${d.ms||0} ms · atualizando direção de arte…`;
+    decisionScheduler.schedule({immediate:true});
+  }catch(e){
+    if(session!==voiceSession)return;
+    voiceStage('text','error',e.code||e.message);
+    status.textContent=`⚠️ Transcrição: ${e.message}`;
+  }
 }
-function stopMic(message='Microfone fechado. Atualização final enviada.'){
+async function stopMic(message='Microfone desligado.'){
+  if(!micWanted&&!micListening)return;
+  const capture=voiceCapture; voiceCapture=null;
+  try{await capture?.stop?.({flush:true});}catch{}
   micWanted=false;
-  try{recognition?.stop();}catch{}
-  voiceMeter?.stop?.(); voiceMeter=null;
-  setMicState(false,message); closeTranscript();
+  voiceSession+=1;
+  setMicState(false,message);
+  closeTranscript();
   decisionScheduler.schedule({immediate:true});
 }
 function setupMic(){
-  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SpeechRecognition){
-    micBtn.disabled=true; micBtn.title='Reconhecimento de voz não disponível neste navegador.';
-    voiceStage('audio','error','Web Speech API indisponível');
-    status.textContent='Este navegador não tem reconhecimento de voz. Use Chrome, Edge ou Safari.';
+  const supported=!!navigator.mediaDevices?.getUserMedia && !!(window.AudioContext||window.webkitAudioContext);
+  if(!supported){
+    micBtn.disabled=true;
+    micBtn.title='Captura de áudio indisponível neste navegador.';
+    voiceStage('audio','error','Web Audio indisponível');
+    status.textContent='Este navegador não permite captura de áudio necessária ao Studio.';
     return;
   }
 
-  recognition=new SpeechRecognition();
-  recognition.lang='pt-BR';
-  recognition.continuous=true;
-  recognition.interimResults=true;
-  recognition.maxAlternatives=1;
-
-  let resultSeen=false, speechSeen=false, speechTimer=null, localMode=false;
-  const clearSpeechTimer=()=>{if(speechTimer){clearTimeout(speechTimer);speechTimer=null;}};
-
-  async function startRecognitionPreferred(){
-    resetVoiceStages();
-    voiceStage('audio','active','Preparando reconhecimento');
-    if(!micWanted)return;
-    try{
-      const canLocal=typeof SpeechRecognition.available==='function'
-        && typeof SpeechRecognition.install==='function'
-        && 'processLocally' in recognition;
-      if(canLocal){
-        let availability='unavailable';
-        try{
-          availability=await SpeechRecognition.available({langs:['pt-BR'],processLocally:true,quality:'dictation'});
-        }catch{
-          try{availability=await SpeechRecognition.available({langs:['pt-BR'],processLocally:true});}catch{}
-        }
-        if(!micWanted)return;
-        if(availability==='available'){
-          recognition.processLocally=true; localMode=true;
-          status.textContent='🎙️ Reconhecimento pt-BR local pronto · ligando microfone…';
-        }else if(availability==='downloadable'||availability==='downloading'){
-          status.textContent='⬇️ Preparando reconhecimento pt-BR no próprio navegador…';
-          let installed=false;
-          try{installed=await SpeechRecognition.install({langs:['pt-BR'],processLocally:true,quality:'dictation'});}
-          catch{try{installed=await SpeechRecognition.install({langs:['pt-BR'],processLocally:true});}catch{}}
-          if(!micWanted)return;
-          recognition.processLocally=!!installed; localMode=!!installed;
-          status.textContent=installed?'✓ Português instalado · ligando microfone…':'Reconhecimento local indisponível · usando serviço do navegador…';
-        }else{
-          recognition.processLocally=false; localMode=false;
-        }
-      }
-      recognition.start();
-    }catch(e){
-      micWanted=false; closeTranscript(); voiceStage('audio','error',e?.name||'falha');
-      status.textContent='⚠️ Não foi possível ligar o reconhecimento de voz neste navegador.';
-    }
-  }
-
-  recognition.onstart=()=>{
-    resultSeen=false; speechSeen=false; clearSpeechTimer();
-    setMicState(true,localMode?'🎙️ Ouvindo em português · reconhecimento local.':'🎙️ Ouvindo em português · reconhecimento do navegador.');
-    paintTranscript();
-    voiceStage('audio','ok',localMode?'Reconhecimento local ativo':'Reconhecimento ativo');
-    setTimeout(()=>{if(micWanted)void startVoiceMeter();},180);
-  };
-  recognition.onaudiostart=()=>{
-    voiceStage('audio','ok','Fluxo de áudio ativo');
-    if(micWanted)status.textContent='🎙️ Microfone ativo · aguardando sua fala…';
-  };
-  recognition.onspeechstart=()=>{
-    speechSeen=true; voiceStage('speech','ok','Fala detectada');
-    if(micWanted)status.textContent='🎙️ Fala detectada · transcrevendo ao vivo…';
-    clearSpeechTimer();
-    speechTimer=setTimeout(()=>{
-      if(micWanted&&!resultSeen){
-        voiceStage('text','error','Sem resultado de transcrição');
-        status.textContent='⚠️ O áudio e a fala chegaram, mas ainda não veio texto do reconhecedor.';
-      }
-    },4500);
-  };
-  recognition.onresult=(event)=>{
-    resultSeen=true; clearSpeechTimer(); voiceStage('text','ok','Texto recebido');
-    let interim='';
-    for(let i=event.resultIndex;i<event.results.length;i++){
-      const text=(event.results[i][0]?.transcript||'').trim();
-      if(!text)continue;
-      if(event.results[i].isFinal)micFinalText+=(micFinalText?' ':'')+text;
-      else interim+=(interim?' ':'')+text;
-    }
-    micInterimText=interim;
-    const spoken=[micFinalText,micInterimText].filter(Boolean).join(' ').trim();
-    briefing.value=[micBaseText,spoken].filter(Boolean).join(micBaseText&&spoken?'\n':'').slice(0,3000);
-    paintTranscript();
-    decisionScheduler.schedule();
-  };
-  recognition.onnomatch=()=>{
-    voiceStage('text','error','Áudio sem palavras reconhecidas');
-    status.textContent='⚠️ Ouvi áudio, mas não consegui reconhecer palavras.';
-  };
-  recognition.onerror=(event)=>{
-    clearSpeechTimer();
-    const code=String(event.error||'erro');
-    if(code==='no-speech'||code==='aborted')return;
-    const friendly={
-      'not-allowed':'O navegador bloqueou o microfone. Libere o acesso no cadeado da barra de endereço.',
-      'service-not-allowed':'O serviço de reconhecimento de voz foi bloqueado pelo navegador.',
-      'audio-capture':'Nenhum microfone encontrado.',
-      'network':'O serviço remoto de reconhecimento de voz falhou na rede.',
-      'language-not-supported':'Português não está disponível nesse modo de reconhecimento.',
-      'language-unavailable':'O pacote de português está indisponível nesse modo.'
-    }[code]||`O reconhecimento de voz parou (${code}).`;
-    voiceStage(speechSeen?'text':'audio','error',code);
-    micWanted=false; voiceMeter?.stop?.(); voiceMeter=null;
-    setMicState(false); closeTranscript();
-    status.textContent='⚠️ '+friendly;
-  };
-  recognition.onend=()=>{
-    clearSpeechTimer(); setMicState(false);
-    if(micWanted&&document.visibilityState==='visible'){
-      setTimeout(()=>{void startRecognitionPreferred();},220);
-      return;
-    }
-    voiceMeter?.stop?.(); voiceMeter=null; closeTranscript();
-  };
-
   micBtn.disabled=false;
-  micBtn.title='Voz ao vivo em português do Brasil';
-  micBtn.addEventListener('click',()=>{
-    if(micWanted||micListening){stopMic();return;}
-    micWanted=true; localMode=false;
-    micBaseText=briefing.value.trim(); micFinalText=''; micInterimText='';
+  micBtn.title='Voz ao vivo · transcrição NVIDIA';
+  micBtn.addEventListener('click',async()=>{
+    if(micWanted||micListening){void stopMic();return;}
+    const session=++voiceSession;
+    micWanted=true;
+    micBaseText=briefing.value.trim();
+    micFinalText='';micInterimText='';
+    resetVoiceStages();
+    voiceStage('audio','active','Abrindo microfone');
     paintTranscript();
-    void startRecognitionPreferred();
+    setMicState(true,'🎙️ Abrindo voz ao vivo · transcrição NVIDIA…');
+    try{
+      voiceCapture=await createBackendVoiceCapture(vuEl,{
+        onAudio:()=>{
+          if(session!==voiceSession)return;
+          voiceStage('audio','ok','Áudio chegando');
+          status.textContent='🎙️ Áudio ativo · fale normalmente.';
+        },
+        onSpeech:()=>{
+          if(session!==voiceSession)return;
+          voiceStage('speech','ok','Fala detectada');
+          status.textContent='🎙️ Fala detectada · preparando transcrição…';
+        },
+        onSegment:(wav,meta)=>transcribeVoiceSegment(wav,{...meta,session}),
+        onError:(e)=>{
+          if(session!==voiceSession)return;
+          voiceStage('text','error',e?.message||'erro');
+          status.textContent='⚠️ Erro no fluxo de voz: '+(e?.message||'erro');
+        },
+        silenceMs:460,
+        maxSegmentMs:1800,
+        minSegmentMs:320,
+      });
+      if(session!==voiceSession){await voiceCapture?.stop?.({flush:false});voiceCapture=null;return;}
+      setMicState(true,'🎙️ Ouvindo ao vivo · NVIDIA transcreve e o Jev redesenha.');
+    }catch(e){
+      if(session!==voiceSession)return;
+      micWanted=false;voiceCapture=null;
+      setMicState(false);
+      closeTranscript();
+      voiceStage('audio','error',e?.name||e?.message||'falha');
+      status.textContent='⚠️ Não consegui abrir o microfone: '+(e?.message||'permissão/captura indisponível');
+    }
   });
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden&&micWanted)stopMic('Microfone desligado enquanto a aba estava em segundo plano.');
+    if(document.hidden&&micWanted)void stopMic('Microfone desligado enquanto a aba estava em segundo plano.');
   });
 }
 
