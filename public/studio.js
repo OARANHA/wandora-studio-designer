@@ -1,13 +1,16 @@
 import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderEmail, renderAds } from './render.mjs';
 import { sampleGoodVariants, restoreJevChoices } from './variation.mjs';
+import { buildSiteHtml, buildEmailHtml, buildSignatureHtml, buildAdsHtml, buildProjectJson, downloadText, slugify } from './export.mjs';
 const $ = (s) => document.querySelector(s);
 const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), providers=$('#providers');
 const projectSelect=$('#project-select'), projectName=$('#project-name'), clientName=$('#client-name');
 const createProjectBtn=$('#create-project'), saveVersionBtn=$('#save-version'), openVersionsBtn=$('#open-versions'), generateCopyBtn=$('#generate-copy');
-const anotherVersionBtn=$('#another-version'), xrayBtn=$('#xray'), backJevBtn=$('#back-jev');
+const anotherVersionBtn=$('#another-version'), xrayBtn=$('#xray'), backJevBtn=$('#back-jev'), micBtn=$('#mic'), exportBtn=$('#export');
 const commandInput=$('#command'), applyCommandBtn=$('#apply-command'), lockStrip=$('#lock-strip');
 const versionsDialog=$('#versions-dialog'), versionsList=$('#versions-list'), xrayDialog=$('#xray-dialog'), xrayList=$('#xray-list'), xraySummary=$('#xray-summary');
+const exportDialog=$('#export-dialog'), exportSiteBtn=$('#export-site'), exportEmailBtn=$('#export-email'), exportSignatureBtn=$('#export-signature'), copySignatureBtn=$('#copy-signature'), exportAdsBtn=$('#export-ads'), exportJsonBtn=$('#export-json');
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
+let recognition=null, micListening=false, micStopTimer=null, micBaseText='', micFinalText='';
 const labels={seg:'Segmento',pers:'Personalidade',pub:'Público',obj:'Objetivo',canal:'Canal',preco:'Preço',mat:'Maturidade',dif:'Diferencial',oferta:'Oferta',emoji:'Emojis'};
 const channel={entender:$('#ch-entender'),site:$('#ch-site'),marca:$('#ch-marca'),posts:$('#ch-posts'),email:$('#ch-email'),anuncios:$('#ch-anuncios')};
 const signal={site:$('#signal-site'),marca:$('#brand-signal'),posts:$('#signal-posts'),email:$('#signal-email'),anuncios:$('#signal-anuncios')};
@@ -59,6 +62,7 @@ function refreshProjectButtons(){
   xrayBtn.disabled=!latestComplete;
   applyCommandBtn.disabled=!latestComplete || commandBusy;
   backJevBtn.hidden=!latestVariation.length;
+  exportBtn.disabled=!latestComplete;
 }
 async function json(url,opts={}){
   const r=await fetch(url,{...opts,headers:{'content-type':'application/json',...(opts.headers||{})}});
@@ -386,6 +390,110 @@ async function generateCopy(){
   }
 }
 
+function exportContext(){
+  return {project:activeProject,decisions:latestDecisions,copy:latestCopy,locks:{choices:lockedChoices,targets:lockedTargets},history:commandHistory};
+}
+function exportBase(){
+  return slugify(activeProject?.name || activeProject?.clientName || latestCopy?.brand?.name || 'wandora-studio');
+}
+function ensureExportable(){
+  if(!latestComplete){ status.textContent='Conclua as 89 decisões antes de exportar.'; return false; }
+  return true;
+}
+function openExport(){
+  if(!ensureExportable()) return;
+  exportDialog.showModal();
+}
+function exportSite(){
+  const ctx=exportContext(); downloadText(`site-${exportBase()}.html`,buildSiteHtml(ctx),'text/html;charset=utf-8');
+  status.textContent='Site HTML exportado.';
+}
+function exportEmail(){
+  const ctx=exportContext(); downloadText(`email-${exportBase()}.html`,buildEmailHtml(ctx),'text/html;charset=utf-8');
+  status.textContent='E-mail HTML exportado.';
+}
+function exportSignature(){
+  const ctx=exportContext(); downloadText(`assinatura-${exportBase()}.html`,buildSignatureHtml(ctx),'text/html;charset=utf-8');
+  status.textContent='Assinatura HTML exportada.';
+}
+async function copySignature(){
+  const html=buildSignatureHtml(exportContext());
+  try{
+    if(navigator.clipboard?.write && window.ClipboardItem){
+      const item=new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([html],{type:'text/plain'})});
+      await navigator.clipboard.write([item]);
+    }else{
+      await navigator.clipboard.writeText(html);
+    }
+    status.textContent='Assinatura copiada para a área de transferência.';
+  }catch{
+    status.textContent='Não foi possível copiar automaticamente. Use “ASSINATURA · HTML”.';
+  }
+}
+function exportAds(){
+  const ctx=exportContext(); downloadText(`banners-${exportBase()}.html`,buildAdsHtml(ctx),'text/html;charset=utf-8');
+  status.textContent='Kit com 6 formatos de banners exportado.';
+}
+function exportJson(){
+  const ctx=exportContext(); downloadText(`projeto-${exportBase()}.json`,buildProjectJson(ctx),'application/json;charset=utf-8');
+  status.textContent='Estado do projeto exportado em JSON.';
+}
+
+function setMicState(listening,message=''){
+  micListening=!!listening;
+  micBtn.classList.toggle('is-listening',micListening);
+  micBtn.setAttribute('aria-pressed',String(micListening));
+  micBtn.textContent=micListening?'REC':'MIC';
+  if(message)status.textContent=message;
+}
+function stopMic(){
+  if(micStopTimer){clearTimeout(micStopTimer);micStopTimer=null;}
+  try{recognition?.stop();}catch{}
+}
+function setupMic(){
+  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    micBtn.disabled=true; micBtn.title='Reconhecimento de voz não disponível neste navegador.';
+    return;
+  }
+  recognition=new SpeechRecognition();
+  recognition.lang='pt-BR';
+  recognition.continuous=true;
+  recognition.interimResults=true;
+  recognition.maxAlternatives=1;
+  recognition.onstart=()=>{
+    micBaseText=briefing.value.trim();
+    micFinalText='';
+    setMicState(true,'Microfone aberto. Fale normalmente — até 40 segundos.');
+    micStopTimer=setTimeout(stopMic,40_000);
+  };
+  recognition.onresult=(event)=>{
+    let interim='';
+    for(let i=event.resultIndex;i<event.results.length;i++){
+      const text=event.results[i][0]?.transcript||'';
+      if(event.results[i].isFinal) micFinalText+=(micFinalText?' ':'')+text.trim();
+      else interim+=(interim?' ':'')+text.trim();
+    }
+    const spoken=[micFinalText,interim].filter(Boolean).join(' ').trim();
+    briefing.value=[micBaseText,spoken].filter(Boolean).join(micBaseText&&spoken?'\n':'').slice(0,3000);
+    briefing.dispatchEvent(new Event('input',{bubbles:true}));
+  };
+  recognition.onerror=(event)=>{
+    const friendly={not_allowed:'Permissão do microfone negada.',audio_capture:'Microfone não encontrado.',network:'Falha de rede no reconhecimento de voz.',no_speech:'Nenhuma fala detectada.'}[event.error]||`Microfone: ${event.error||'erro'}.`;
+    status.textContent=friendly;
+  };
+  recognition.onend=()=>{
+    if(micStopTimer){clearTimeout(micStopTimer);micStopTimer=null;}
+    setMicState(false,micFinalText?'Transcrição adicionada ao briefing.':'Microfone fechado.');
+  };
+  micBtn.disabled=false;
+  micBtn.title='Ditado em português do Brasil (até 40 s)';
+  micBtn.addEventListener('click',()=>{
+    if(micListening){stopMic();return;}
+    try{recognition.start();}catch{status.textContent='O microfone já está iniciando.';}
+  });
+}
+
 async function readSse(response,onEvent){
   if(!response.ok){let d={};try{d=await response.json();}catch{}throw new Error(d.error||`HTTP ${response.status}`);}
   const reader=response.body.getReader(), decoder=new TextDecoder(); let buffer='';
@@ -430,5 +538,13 @@ applyCommandBtn.addEventListener('click',applyCommand);
 commandInput.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyCommand();}});
 anotherVersionBtn.addEventListener('click',anotherVersion);
 xrayBtn.addEventListener('click',openXray);
+exportBtn.addEventListener('click',openExport);
+exportSiteBtn.addEventListener('click',exportSite);
+exportEmailBtn.addEventListener('click',exportEmail);
+exportSignatureBtn.addEventListener('click',exportSignature);
+copySignatureBtn.addEventListener('click',copySignature);
+exportAdsBtn.addEventListener('click',exportAds);
+exportJsonBtn.addEventListener('click',exportJson);
 backJevBtn.addEventListener('click',backToJev);
+setupMic();
 await Promise.all([loadConfig(),loadProjects()]);
