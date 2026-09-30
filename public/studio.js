@@ -348,25 +348,65 @@ function applySiteRouteClient(route){
   projectV2={...projectV2,siteStructure:next};
   return next;
 }
-async function tryStructuralSiteCommand(comando,target,tipo){
-  if(target!=='site'||tipo!=='comando_de_edicao')return false;
-  const route=await json('/api/v2/site-command',{method:'POST',body:JSON.stringify({command:comando,briefing:briefing.value,current:projectV2.siteStructure||{}})});
-  if(!route.ok||route.operation==='none')return false;
+function localStructuralIntent(comando){
+  const s=String(comando||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,' ');
+  const sectionTests=[
+    ['hero',/\b(hero|topo|primeira\s+dobra|banner\s+principal)\b/],
+    ['faq',/\b(faq|perguntas?\s+frequentes|duvidas?)\b/],
+    ['benefits',/\b(beneficios?|vantagens?|diferenciais?)\b/],
+    ['proof',/\b(prova\s+social|depoimentos?|avaliacoes?|clientes?)\b/],
+    ['features',/\b(servicos?|recursos?|funcionalidades?|solucoes?)\b/],
+    ['process',/\b(como\s+funciona|processo|etapas?|passo\s+a\s+passo)\b/],
+    ['gallery',/\b(galeria|portfolio|fotos?|trabalhos?)\b/],
+    ['pricing',/\b(precos?|planos?|valores?|pacotes?)\b/],
+    ['lead',/\b(formulario|captura\s+de\s+lead|lead|contato)\b/],
+    ['cta',/\b(cta|call\s+to\s+action|chamada\s+final|conversao\s+final)\b/],
+    ['footer',/\b(rodape|footer)\b/],
+  ];
+  const hit=sectionTests.find(([,rx])=>rx.test(s));
+  if(!hit)return null;
+  let operation='edit';
+  if(/\b(cria|crie|criar|adiciona|adicione|adicionar|coloca|coloque|incluir|inclui|insere|insira|bota|botar)\b/.test(s))operation='add';
+  else if(/\b(remove|remova|tirar|tira|excluir|exclui|apagar|apaga|esconder|esconde)\b/.test(s))operation='remove';
+  else if(/\b(move|mover|sobe|subir|desce|descer|reordena|reordenar)\b/.test(s))operation='reorder';
+  const section=hit[0];
+  let heroVariant='split';
+  if(section==='hero'){
+    if(/\b(mascote|personagem|robo|robot)\b/.test(s))heroVariant='mascot_right';
+    else if(/\b(dashboard|painel|mockup|interface)\b/.test(s))heroVariant='dashboard_right';
+    else if(/\b(central|centralizado|centrado)\b/.test(s))heroVariant='centered';
+    else if(/\b(editorial|revista|tipografico|tipografia\s+grande)\b/.test(s))heroVariant='editorial';
+  }
+  return {operation,section,heroVariant,source:'local'};
+}
+async function persistStructuralRoute(route){
   applySiteRouteClient(route);
   if(activeProject){
     const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({v2:projectV2})});
     activeProject=d.project;projectV2=d.project.v2||projectV2;
   }
   renderAll(latestDecisions,latestCopy,projectV2);
+  selectV2Tab('site');
   commandInput.value='';
-  status.textContent=`🏗️ Site: ${route.operation} · ${route.section}${route.section==='hero'?` · ${route.heroVariant}`:''}.`;
+  const verbs={add:'criada',edit:'atualizada',remove:'removida',reorder:'reposicionada'};
+  status.textContent=`🏗️ Seção ${route.section} ${verbs[route.operation]||'atualizada'}${route.section==='hero'?` · ${route.heroVariant}`:''}.`;
   return true;
+}
+async function tryStructuralSiteCommand(comando,target='site',tipo='comando_de_edicao'){
+  const local=localStructuralIntent(comando);
+  if(local)return persistStructuralRoute(local);
+  if(target!=='site'||tipo!=='comando_de_edicao')return false;
+  const route=await json('/api/v2/site-command',{method:'POST',body:JSON.stringify({command:comando,briefing:briefing.value,current:projectV2.siteStructure||{}})});
+  if(!route.ok||route.operation==='none')return false;
+  return persistStructuralRoute(route);
 }
 async function applyCommand(){
   const comando=commandInput.value.trim();
-  if(!latestComplete||comando.split(/\s+/).length<2){status.textContent='Digite o que quer mudar em algumas palavras.';return;}
+  if(comando.split(/\s+/).length<2){status.textContent='Digite o que quer mudar em algumas palavras.';return;}
   commandBusy=true;refreshProjectButtons();status.textContent=`Entendendo “${comando}”…`;
   try{
+    if(await tryStructuralSiteCommand(comando))return;
+    if(!latestComplete){status.textContent='Para ajustes de identidade, conclua primeiro a análise do briefing.';return;}
     const atuais=await currentChoiceLabels();
     const resp=await json('/api/comando',{method:'POST',body:JSON.stringify({comando,descricao:briefing.value,atuais})});
     const confident=['comando_de_edicao','desfazer','fixar'].includes(resp.tipo)&&Number(resp.p_tipo)>=.55;
@@ -377,7 +417,6 @@ async function applyCommand(){
     }
     if(resp.tipo==='outra'){status.textContent='Não parece um pedido de mudança.';return;}
     const target=resp.alvo;
-    if(await tryStructuralSiteCommand(comando,target,resp.tipo))return;
     if(resp.tipo==='fixar'){
       if(!questionInfo?.targets?.[target])await loadQuestionInfo();
       if(!questionInfo?.targets?.[target]){status.textContent='Entendi que quer fixar, mas não qual peça.';return;}
@@ -572,7 +611,7 @@ async function generateCompleteKit(){
 }
 function selectV2Tab(tab){
   document.querySelectorAll('.v2-nav button').forEach(b=>b.classList.toggle('active',b.dataset.v2Tab===tab));
-  const map={site:'.monitor.site',brand:'.monitor.brand-monitor',instagram:'.monitor.posts',stories:'.monitor.stories',email:'.monitor.email',ads:'.monitor.ads',manual:'.monitor.manual'};
+  const map={site:'.monitor.site',brand:'.monitor.brand-monitor',instagram:'.monitor.posts',carousel:'.monitor.posts',stories:'.monitor.stories',email:'.monitor.email',ads:'.monitor.ads',manual:'.monitor.manual'};
   document.querySelectorAll('.pieces .monitor').forEach(m=>m.classList.remove('v2-focus'));
   if(map[tab])document.querySelector(map[tab])?.classList.add('v2-focus');
   if(tab==='manual')status.textContent='Manual de Marca V2 usa identidade + ativos; editor dedicado entra nesta base.';
@@ -834,7 +873,8 @@ generateImageBtn.addEventListener('click',()=>generateMedia('image'));
 generateVideoBtn.addEventListener('click',()=>generateMedia('video'));
 generateKitBtn.addEventListener('click',openKit);
 confirmGenerateKitBtn.addEventListener('click',generateCompleteKit);
-document.querySelectorAll('.v2-nav button').forEach(b=>b.addEventListener('click',()=>selectV2Tab(b.dataset.v2Tab)));
+document.querySelectorAll('.v2-nav button[data-v2-tab]').forEach(b=>b.addEventListener('click',()=>selectV2Tab(b.dataset.v2Tab)));
+document.querySelectorAll('[data-action-export]').forEach(b=>b.addEventListener('click',openExport));
 createProjectBtn.addEventListener('click',createProject);
 projectSelect.addEventListener('change',selectProject);
 saveVersionBtn.addEventListener('click',saveVersion);
