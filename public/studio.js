@@ -10,7 +10,11 @@ const anotherVersionBtn=$('#another-version'), xrayBtn=$('#xray'), backJevBtn=$(
 const commandInput=$('#command'), applyCommandBtn=$('#apply-command'), lockStrip=$('#lock-strip');
 const versionsDialog=$('#versions-dialog'), versionsList=$('#versions-list'), xrayDialog=$('#xray-dialog'), xrayList=$('#xray-list'), xraySummary=$('#xray-summary');
 const exportDialog=$('#export-dialog'), exportSiteBtn=$('#export-site'), exportEmailBtn=$('#export-email'), exportSignatureBtn=$('#export-signature'), copySignatureBtn=$('#copy-signature'), exportAdsBtn=$('#export-ads'), exportJsonBtn=$('#export-json');
-let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
+const openModelsBtn=$('#open-models'), modelsDialog=$('#models-dialog'), modelGrid=$('#model-grid'), modelRouteStatus=$('#model-route-status'), saveModelRoutingBtn=$('#save-model-routing');
+const openAssetsBtn=$('#open-assets'), assetsDialog=$('#assets-dialog'), assetRole=$('#asset-role'), assetFile=$('#asset-file'), uploadAssetBtn=$('#upload-asset'), assetGrid=$('#asset-grid');
+const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGenerateKitBtn=$('#confirm-generate-kit'), kitStatus=$('#kit-status');
+let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
+let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[];
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
 const voiceDiag=$('#voice-diag'), voiceStages=Object.fromEntries([...voiceDiag.querySelectorAll('[data-stage]')].map(el=>[el.dataset.stage,el]));
 let micListening=false, micWanted=false, micBaseText='', micFinalText='', micInterimText='', voiceCapture=null, voiceSession=0, liveUpdateCount=0;
@@ -64,7 +68,10 @@ function resetSignals(){
 function refreshProjectButtons(){
   openVersionsBtn.disabled=!activeProject;
   saveVersionBtn.disabled=!activeProject || !latestComplete;
-  generateCopyBtn.disabled=!latestComplete || !nvidiaReady || copyGenerating;
+  generateCopyBtn.disabled=!latestComplete || !writerReady || copyGenerating;
+  openAssetsBtn.disabled=!activeProject;
+  generateKitBtn.disabled=!activeProject || briefing.value.trim().split(/\s+/).filter(Boolean).length<2 || copyGenerating;
+  openModelsBtn.textContent=`MODELOS · ${String(modelRouting.mode||'auto').toUpperCase()}`;
   anotherVersionBtn.disabled=!latestComplete;
   xrayBtn.disabled=!latestComplete;
   applyCommandBtn.disabled=!latestComplete || commandBusy;
@@ -79,11 +86,13 @@ async function loadConfig(){
   try{
     const c=await json('/api/config');
     nvidiaReady=!!c.providers.nvidia.configured;
-    providers.textContent=`JEV ${c.providers.jev.configured?'●':'○'} · NVIDIA ${nvidiaReady?'●':'○'} · VOZ ${c.providers.speech?.configured?'●':'○'} · ${c.total} decisões`;
-    providers.classList.toggle('ready',c.providers.jev.configured&&nvidiaReady);
-    generateCopyBtn.title=nvidiaReady?`NVIDIA · ${c.providers.nvidia.model}`:'Configure NVIDIA_API_KEY no servidor';
+    chutesReady=!!c.providers.chutes?.configured;
+    writerReady=nvidiaReady||chutesReady;
+    providers.textContent=`JEV ${c.providers.jev.configured?'●':'○'} · NVIDIA ${nvidiaReady?'●':'○'} · CHUTES ${chutesReady?'●':'○'} · VOZ ${c.providers.speech?.configured?'●':'○'} · V2`;
+    providers.classList.toggle('ready',c.providers.jev.configured&&writerReady);
+    generateCopyBtn.title=writerReady?'Writer roteado pelo Jev':'Configure NVIDIA_API_KEY ou CHUTES_API_KEY';
     refreshProjectButtons();
-  }catch{providers.textContent='IA indisponível';nvidiaReady=false;refreshProjectButtons();}
+  }catch{providers.textContent='IA indisponível';nvidiaReady=false;chutesReady=false;writerReady=false;refreshProjectButtons();}
 }
 async function loadProjects(selectId=null){
   const d=await json('/api/projects');
@@ -105,10 +114,10 @@ async function createProject(){
 }
 async function selectProject(){
   const id=projectSelect.value;
-  if(!id){activeProject=null;refreshProjectButtons();status.textContent='Novo projeto: dê um nome e crie quando quiser salvar versões.';return;}
+  if(!id){activeProject=null;modelRouting={mode:'auto',selections:{}};refreshProjectButtons();status.textContent='Novo projeto: dê um nome e crie quando quiser salvar versões.';return;}
   try{
-    const d=await json(`/api/projects/${id}`); activeProject=d.project; briefing.value=d.project.briefing||''; resetSignals(); refreshProjectButtons();
-    status.textContent=`Projeto “${d.project.name}” carregado · ${d.project.versionCount||0} versão(ões).`;
+    const d=await json(`/api/projects/${id}`); activeProject=d.project; briefing.value=d.project.briefing||''; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; resetSignals(); refreshProjectButtons();
+    status.textContent=`Projeto “${d.project.name}” carregado · ${d.project.versionCount||0} versão(ões) · modelos ${modelRouting.mode}.`;
   }catch(e){status.textContent=e.message;}
 }
 async function saveVersion(){
@@ -369,32 +378,137 @@ function copyShape(fields={}){
 }
 async function generateCopy(){
   if(!latestComplete){status.textContent='Conclua as 89 decisões antes de escrever os textos.';return;}
-  if(!nvidiaReady){status.textContent='Configure NVIDIA_API_KEY no servidor para escrever os textos.';return;}
+  if(!writerReady){status.textContent='Configure NVIDIA_API_KEY ou CHUTES_API_KEY para escrever os textos.';return;}
   copyController?.abort(); copyController=new AbortController(); const controller=copyController;
-  copyGenerating=true; refreshProjectButtons(); generateCopyBtn.textContent='NVIDIA ESCREVENDO…'; status.textContent='NVIDIA preparando 11 textos…';
+  copyGenerating=true; refreshProjectButtons(); generateCopyBtn.textContent='IA ESCREVENDO…'; status.textContent='Jev escolhendo o Writer…';
   try{
-    const r=await fetch('/api/escrever',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({texto:briefing.value,decisoes:latestDecisions}),signal:controller.signal});
+    const r=await fetch('/api/escrever',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({texto:briefing.value,decisoes:latestDecisions,modelMode:modelRouting.mode,modelKey:modelRouting.selections?.copy||''}),signal:controller.signal});
     await readSse(r,(event,d)=>{
       if(controller!==copyController)return;
-      if(event==='inicio') status.textContent=`NVIDIA · ${d.model} · iniciando…`;
+      if(event==='inicio') status.textContent=`${String(d.provider||'IA').toUpperCase()} · ${d.model} · ${d.route?.reason||'iniciando…'}`;
       if(event==='tok' && d.fields){
         latestCopy=copyShape(d.fields);
         renderAll(latestDecisions,latestCopy);
         const n=Object.values(d.fields).filter(Boolean).length;
-        status.textContent=`NVIDIA escrevendo… ${n}/11 campos`;
+        status.textContent=`IA escrevendo… ${n}/11 campos`;
       }
       if(event==='fim'){
         latestCopy=copyShape(d.fields||{});
         renderAll(latestDecisions,latestCopy);
-        status.textContent=d.complete?`11 textos prontos · primeira palavra em ${d.first_token_ms??'—'} ms · total ${d.ms} ms`:`NVIDIA terminou com ${Object.values(d.fields||{}).filter(Boolean).length}/11 campos.`;
+        status.textContent=d.complete?`11 textos prontos · primeira palavra em ${d.first_token_ms??'—'} ms · total ${d.ms} ms`:`IA terminou com ${Object.values(d.fields||{}).filter(Boolean).length}/11 campos.`;
       }
       if(event==='erro') throw Object.assign(new Error(d.error||'Falha da NVIDIA.'),{code:d.code});
     });
   }catch(e){
     if(e.name!=='AbortError') status.textContent=e.message;
   }finally{
-    if(controller===copyController){copyGenerating=false;generateCopyBtn.textContent='TEXTOS NVIDIA';refreshProjectButtons();}
+    if(controller===copyController){copyGenerating=false;generateCopyBtn.textContent='TEXTOS IA';refreshProjectButtons();}
   }
+}
+
+
+async function loadModelCatalog({refresh=false}={}){
+  const d=await json(`/api/models${refresh?'?refresh=1':''}`);
+  modelCatalog=d.models||[];modelTasks=d.tasks||{};
+  return d;
+}
+function modelsForTask(task){
+  return modelCatalog.filter(m=>{
+    if(!m.configured)return false;
+    if(task==='image')return m.output?.includes('image');
+    if(task==='video')return m.output?.includes('video');
+    return m.output?.includes('text')&&(m.strengths?.includes(task)||!(m.strengths||[]).length);
+  });
+}
+function renderModelGrid(){
+  modelGrid.replaceChildren();
+  for(const [task,meta] of Object.entries(modelTasks)){
+    const card=document.createElement('section');card.className='model-task';
+    const head=document.createElement('header'),b=document.createElement('b'),em=document.createElement('em');
+    b.textContent=meta.label;em.textContent=task.toUpperCase();head.append(b,em);
+    const sel=document.createElement('select');sel.dataset.task=task;
+    const options=modelsForTask(task);
+    sel.append(new Option(options.length?'Jev escolhe automaticamente':'Nenhum worker disponível',''));
+    for(const m of options)sel.append(new Option(`${m.label} · ${m.provider}`,m.key));
+    sel.value=modelRouting.selections?.[task]||'';
+    sel.disabled=modelRouting.mode!=='manual';
+    sel.addEventListener('change',()=>{modelRouting.selections={...(modelRouting.selections||{}),[task]:sel.value};});
+    const p=document.createElement('p');
+    p.textContent=options.length?`${options.length} worker(s) disponível(is). Em Auto o Jev decide por tarefa.`:(task==='image'||task==='video'?'Configure o endpoint de mídia do Chutes no Portainer.':'Nenhum provider configurado.');
+    card.append(head,sel,p);modelGrid.append(card);
+  }
+}
+async function openModels(){
+  modelsDialog.showModal();modelRouteStatus.textContent='Consultando providers…';
+  try{await loadModelCatalog({refresh:true});renderModelGrid();modelRouteStatus.textContent=`${modelCatalog.filter(m=>m.configured).length} worker(s) disponível(is).`;}
+  catch(e){modelRouteStatus.textContent=e.message;}
+}
+function routingModeChanged(){
+  const input=modelsDialog.querySelector('input[name="routing-mode"]:checked');
+  modelRouting.mode=input?.value||'auto';renderModelGrid();
+}
+async function saveModelRouting(){
+  modelRouting.mode=modelsDialog.querySelector('input[name="routing-mode"]:checked')?.value||'auto';
+  if(modelRouting.mode!=='manual')modelRouting.selections={};
+  if(activeProject){
+    const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({modelRouting})});
+    activeProject=d.project;modelRouting=d.project.modelRouting||modelRouting;
+  }
+  refreshProjectButtons();modelRouteStatus.textContent=`Roteamento ${modelRouting.mode} salvo`;status.textContent=`Modelos: modo ${modelRouting.mode}.`;
+}
+async function loadAssets(){
+  if(!activeProject)return;
+  const d=await json(`/api/projects/${activeProject.id}/assets`);assetItems=d.assets||[];renderAssets();
+}
+function renderAssets(){
+  assetGrid.replaceChildren();
+  if(!assetItems.length){const p=document.createElement('p');p.textContent='Nenhum ativo enviado ainda. Suba o logo ou mascote deste cliente.';assetGrid.append(p);return;}
+  for(const a of assetItems){
+    const card=document.createElement('article');card.className='asset-card';
+    const img=document.createElement('img');img.src=`/api/projects/${activeProject.id}/assets/${a.id}/content`;img.alt=a.name;img.loading='lazy';
+    const meta=document.createElement('div');meta.className='asset-meta';const b=document.createElement('b'),small=document.createElement('small');b.textContent=a.name;small.textContent=`${a.role} · ${Math.ceil(a.size/1024)} KB`;meta.append(b,small);
+    const del=document.createElement('button');del.type='button';del.textContent='×';del.title='Excluir ativo';
+    del.addEventListener('click',async()=>{await fetch(`/api/projects/${activeProject.id}/assets/${a.id}`,{method:'DELETE'});await loadAssets();});
+    card.append(img,meta,del);assetGrid.append(card);
+  }
+}
+async function openAssets(){if(!activeProject)return;assetsDialog.showModal();assetGrid.textContent='Carregando…';try{await loadAssets();}catch(e){assetGrid.textContent=e.message;}}
+async function uploadAsset(){
+  if(!activeProject)return;const file=assetFile.files?.[0];if(!file){status.textContent='Escolha um arquivo primeiro.';return;}
+  uploadAssetBtn.disabled=true;
+  try{
+    const r=await fetch(`/api/projects/${activeProject.id}/assets`,{method:'POST',headers:{'content-type':file.type,'x-asset-role':assetRole.value,'x-file-name':encodeURIComponent(file.name)},body:file});
+    const d=await r.json();if(!r.ok)throw new Error(d.error||'Falha no upload.');
+    assetFile.value='';await loadAssets();status.textContent=`Ativo “${d.asset.name}” salvo no projeto.`;
+  }catch(e){status.textContent=e.message;}finally{uploadAssetBtn.disabled=false;}
+}
+function openKit(){if(!activeProject)return;kitStatus.textContent='';kitDialog.showModal();}
+async function generateCompleteKit(){
+  const materials=[...kitDialog.querySelectorAll('.kit-checks input:checked')].map(x=>x.value);
+  if(!materials.length){kitStatus.textContent='Escolha ao menos um entregável.';return;}
+  confirmGenerateKitBtn.disabled=true;kitStatus.textContent='1/3 · consolidando direção de arte…';
+  try{
+    if(!latestComplete){
+      await runDecisionUpdate(briefing.value,Date.now(),{live:false});
+      if(!latestComplete)throw new Error('As 89 decisões não fecharam; confira os canais antes de continuar.');
+    }
+    kitStatus.textContent='2/3 · Jev escolhendo o Writer e produzindo copy…';
+    if(writerReady)await generateCopy();
+    kitStatus.textContent='3/3 · salvando o escopo do kit no projeto…';
+    const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({briefing:briefing.value,modelRouting,v2:{kitStatus:'ready',materials}})});
+    activeProject=d.project;
+    await saveVersion();
+    kitStatus.textContent=`✓ Base do kit criada: ${materials.join(', ')}. Marca/site/carrosséis/e-mail/ads estão renderizados; módulos V2 adicionais usam este mesmo estado.`;
+    status.textContent='Kit base V2 pronto e versionado.';
+  }catch(e){kitStatus.textContent='⚠ '+e.message;}finally{confirmGenerateKitBtn.disabled=false;refreshProjectButtons();}
+}
+function selectV2Tab(tab){
+  document.querySelectorAll('.v2-nav button').forEach(b=>b.classList.toggle('active',b.dataset.v2Tab===tab));
+  const map={site:'.monitor.site',brand:'.monitor.brand-monitor',instagram:'.monitor.posts',email:'.monitor.email',ads:'.monitor.ads'};
+  document.querySelectorAll('.pieces .monitor').forEach(m=>m.classList.remove('v2-focus'));
+  if(map[tab])document.querySelector(map[tab])?.classList.add('v2-focus');
+  if(tab==='manual')status.textContent='Manual de Marca V2 usa identidade + ativos; editor dedicado entra nesta base.';
+  if(tab==='stories')status.textContent='Stories V2 deriva o carrossel e os ativos do projeto; módulo visual está preparado na base.';
 }
 
 function exportContext(){
@@ -637,6 +751,14 @@ function analyze(){
 btn.addEventListener('click',analyze);
 briefing.addEventListener('input',()=>{if(!micWanted)decisionScheduler.schedule();});
 briefing.addEventListener('keydown',(e)=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();decisionScheduler.schedule({immediate:true});}});
+openModelsBtn.addEventListener('click',openModels);
+modelsDialog.querySelectorAll('input[name="routing-mode"]').forEach(r=>r.addEventListener('change',routingModeChanged));
+saveModelRoutingBtn.addEventListener('click',saveModelRouting);
+openAssetsBtn.addEventListener('click',openAssets);
+uploadAssetBtn.addEventListener('click',uploadAsset);
+generateKitBtn.addEventListener('click',openKit);
+confirmGenerateKitBtn.addEventListener('click',generateCompleteKit);
+document.querySelectorAll('.v2-nav button').forEach(b=>b.addEventListener('click',()=>selectV2Tab(b.dataset.v2Tab)));
 createProjectBtn.addEventListener('click',createProject);
 projectSelect.addEventListener('change',selectProject);
 saveVersionBtn.addEventListener('click',saveVersion);
@@ -655,4 +777,5 @@ exportAdsBtn.addEventListener('click',exportAds);
 exportJsonBtn.addEventListener('click',exportJson);
 backJevBtn.addEventListener('click',backToJev);
 setupMic();
-await Promise.all([loadConfig(),loadProjects()]);
+await Promise.all([loadConfig(),loadProjects(),loadModelCatalog().catch(()=>null)]);
+modelsDialog.querySelector(`input[name="routing-mode"][value="${modelRouting.mode}"]`)?.setAttribute('checked','checked');
