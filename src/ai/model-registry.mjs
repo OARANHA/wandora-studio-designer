@@ -118,6 +118,10 @@ export async function routeModel({task,mode='auto',preferredKey='',context=''}={
     if(!picked)throw new HttpError(400,'O modelo manual não está disponível para esta tarefa.','model_not_available');
     return {task,mode,selected:picked,reason:'Escolha manual do usuário.',candidates};
   }
+  if(mode==='assistido'&&preferredKey){
+    const picked=candidates.find(m=>m.key===preferredKey);
+    if(picked)return {task,mode,selected:picked,reason:'Override do usuário sobre a recomendação assistida.',candidates};
+  }
 
   if(candidates.length===1)return {task,mode,selected:candidates[0],reason:'Único modelo disponível para a tarefa.',candidates};
 
