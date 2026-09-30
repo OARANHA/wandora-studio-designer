@@ -5,11 +5,12 @@ import { config } from '../config.mjs';
 import { HttpError } from '../lib/http.mjs';
 import { getProject } from './projects.mjs';
 
-const ROLES=new Set(['logo','logo-secondary','mascot','reference','product']);
+const ROLES=new Set(['logo','logo-secondary','mascot','reference','product','generated-image','generated-video']);
 const TYPES=new Map([
   ['image/png',{ext:'png',magic:(b)=>b.length>8&&b[0]===0x89&&b.subarray(1,4).toString()==='PNG'}],
   ['image/jpeg',{ext:'jpg',magic:(b)=>b.length>3&&b[0]===0xff&&b[1]===0xd8&&b[2]===0xff}],
   ['image/webp',{ext:'webp',magic:(b)=>b.length>12&&b.subarray(0,4).toString()==='RIFF'&&b.subarray(8,12).toString()==='WEBP'}],
+  ['video/mp4',{ext:'mp4',magic:(b)=>b.length>12&&b.subarray(4,8).toString()==='ftyp'}],
 ]);
 const MAX_ASSETS=60;
 const MAX_BYTES=8_000_000;
