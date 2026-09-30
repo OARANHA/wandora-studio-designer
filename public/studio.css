@@ -55,3 +55,11 @@
 .lock-tape{border:0;background:#f5efd9;color:#24231e;padding:5px 8px;font:italic 700 9px Georgia,serif;transform:rotate(-.5deg);box-shadow:0 1px 3px #0004;cursor:pointer}
 .lock-tape:nth-child(even){transform:rotate(.7deg)}.lock-tape:hover{background:#fff8df}.lock-tape:focus-visible{outline:2px solid #2f6fdb;outline-offset:2px}
 @media(max-width:700px){.talkback{grid-template-columns:minmax(0,1fr) 68px}.lock-strip{margin-bottom:4px}}
+
+
+.mic.is-listening{background:linear-gradient(#ff6b5d,#c82419);box-shadow:inset 0 2px 0 #fff5,inset 0 -5px 0 #0003,0 3px 0 #7c1b16,0 0 22px #e23b2e88;animation:mic-pulse 1s ease-in-out infinite}
+@keyframes mic-pulse{50%{filter:brightness(1.18)}}
+.export-grid{padding:18px;display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px}
+.export-grid .key{min-height:48px}
+.export-note{margin:0;padding:0 18px 18px;color:#777;font-size:11px;line-height:1.45}
+@media(max-width:620px){.export-grid{grid-template-columns:1fr}}
