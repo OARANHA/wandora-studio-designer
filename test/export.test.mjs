@@ -40,10 +40,10 @@ test('ads export contains all six IAB canvas sizes',()=>{
 
 test('project JSON contains decisions without secrets',()=>{
   const raw=buildProjectJson(ctx), doc=JSON.parse(raw);
-  assert.equal(doc.schema,1);
+  assert.equal(doc.schema,2);
   assert.equal(doc.project.name,'Projeto Café');
   assert.ok(doc.decisions.marca);
-  assert.doesNotMatch(raw,/JEV_API_KEY|NVIDIA_API_KEY|SESSION_SECRET/);
+  assert.doesNotMatch(raw,/JEV_API_KEY|NVIDIA_API_KEY|CHUTES_API_KEY|SESSION_SECRET/);
 });
 
 test('slugify produces safe file names',()=>{
