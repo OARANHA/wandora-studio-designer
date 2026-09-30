@@ -9,6 +9,7 @@ import { nvidiaChat, nvidiaStream } from './ai/nvidia.mjs';
 import { transcribeWav } from './ai/speech.mjs';
 import { listModels, modelTasks, routeModel } from './ai/model-registry.mjs';
 import { chutesChat, chutesStream } from './ai/chutes.mjs';
+import { generateChutesImage, generateChutesVideo } from './ai/chutes-media.mjs';
 import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
@@ -261,6 +262,24 @@ const server = http.createServer(async (req, res) => {
       const settled=await Promise.all(jobs);
       if(!controller.signal.aborted){ event('done',{seq,ok:settled.every(x=>x.ok),groups:settled,ms:Date.now()-started}); res.end(); }
       return;
+    }
+    if (path === '/api/v2/media/image' && req.method === 'POST') {
+      const body=await readJson(req,50_000);
+      const projectId=String(body.projectId||'');
+      await getProject(session.email,projectId);
+      const controller=new AbortController(); res.on('close',()=>controller.abort());
+      const media=await generateChutesImage({prompt:body.prompt,negativePrompt:body.negativePrompt,width:body.width,height:body.height,signal:controller.signal});
+      const asset=await putAsset({owner:session.email,projectId,role:'generated-image',originalName:`imagem-ia-${Date.now()}.png`,contentType:media.contentType,buffer:media.body});
+      return sendJson(res,201,{ok:true,asset,provider:'chutes'});
+    }
+    if (path === '/api/v2/media/video' && req.method === 'POST') {
+      const body=await readJson(req,50_000);
+      const projectId=String(body.projectId||'');
+      await getProject(session.email,projectId);
+      const controller=new AbortController(); res.on('close',()=>controller.abort());
+      const media=await generateChutesVideo({prompt:body.prompt,resolution:body.resolution,frames:body.frames,fps:body.fps,signal:controller.signal});
+      const asset=await putAsset({owner:session.email,projectId,role:'generated-video',originalName:`video-ia-${Date.now()}.mp4`,contentType:media.contentType,buffer:media.body});
+      return sendJson(res,201,{ok:true,asset,provider:'chutes'});
     }
     if (path === '/api/transcribe' && req.method === 'POST') {
       const type=String(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();
