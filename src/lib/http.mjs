@@ -46,7 +46,8 @@ export async function serveStatic(res, root, pathname) {
   const file = join(root, rel || 'index.html');
   try {
     const body = await readFile(file);
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream', 'cache-control': extname(file)==='.html' ? 'no-cache' : 'public, max-age=300', 'x-content-type-options':'nosniff' });
+    const ext=extname(file); const mutable=new Set(['.html','.css','.js','.mjs','.json']);
+    res.writeHead(200, { 'content-type': TYPES[ext] || 'application/octet-stream', 'cache-control': mutable.has(ext) ? 'no-cache' : 'public, max-age=300', 'x-content-type-options':'nosniff' });
     res.end(body); return true;
   } catch { return false; }
 }
