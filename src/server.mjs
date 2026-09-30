@@ -23,11 +23,11 @@ const PUBLIC = join(here, '..', 'public');
 
 function loginPage(error = '') {
   const msg = error === 'limite' ? 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' : error ? 'E-mail ou senha incorretos.' : '';
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css?v=20260930-live2"></head>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css?v=20260930-v2c"></head>
   <body class="login-body">
     <main class="login-shell">
       <section class="login-hero" aria-hidden="true">
-        <div class="login-hero-copy"><span>IDEIAS</span><span>MARCAS</span><span>CAMPANHAS</span><b>RESULTADOS</b></div>
+        <div class="login-hero-copy"><span>MARKETING</span><span>POR VOZ.</span><b>RESULTADOS DE VERDADE.</b></div><div class="login-voice-bubble"><i>◉</i><span>Crie uma campanha<br>para o lançamento…</span></div>
         <svg class="mascot-scene" viewBox="0 0 720 720" role="presentation">
           <defs>
             <linearGradient id="robotBody" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffdf3"/><stop offset=".55" stop-color="#e9e5d6"/><stop offset="1" stop-color="#aaa99f"/></linearGradient>
@@ -67,6 +67,7 @@ function loginPage(error = '') {
             <text x="206" y="16" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="44" fill="#050505">W</text>
           </g>
         </svg>
+        <div class="login-float-stack" aria-hidden="true"><div><b>✓ CAMPANHA CRIADA</b><span>Post + carrossel</span></div><div><b>▣ STORIES / REELS</b><span>9:16 pronto para social</span></div><div><b>↗ ANÚNCIOS</b><span>CTA e variações</span></div><div><b>🎙 TUDO COM A SUA VOZ</b><span>Fale. O Studio produz.</span></div></div>
         <div class="hero-desk"><div class="hero-laptop"><b>W</b></div><div class="hero-books"><i>IDEIAS</i><i>MARCAS</i><i>CAMPANHAS</i></div></div>
       </section>
       <section class="login-panel">
@@ -75,12 +76,12 @@ function loginPage(error = '') {
         <div class="login-product">STUDIO DESIGNER</div>
         <div class="login-accent"></div>
         <h1>Entre no<br><strong>Studio Designer</strong></h1>
-        <p class="login-lead">Crie materiais, identidade e campanhas com a estética Wandora.</p>
+        <p class="login-lead">Crie materiais de marketing incríveis com o poder da IA e da sua voz.</p>
         ${msg?`<div class="login-alert" role="alert">${msg}</div>`:''}
         <form method="post" action="/login">
           <label>E-mail<input type="email" name="email" autocomplete="username" placeholder="seu@e-mail.com" required autofocus></label>
           <label>Senha<input type="password" name="password" autocomplete="current-password" placeholder="Sua senha" required></label>
-          <button class="login-submit" type="submit"><span>Entrar</span><b aria-hidden="true">→</b></button>
+          <button class="login-submit" type="submit"><span>Entrar no Studio Designer</span><b aria-hidden="true">→</b></button>
         </form>
         <footer>🔒 Acesso restrito à equipe Wandora</footer>
       </section>
