@@ -472,7 +472,7 @@ function renderModelGrid(){
     sel.append(new Option(options.length?'Jev escolhe automaticamente':'Nenhum worker disponível',''));
     for(const m of options)sel.append(new Option(`${m.label} · ${m.provider}`,m.key));
     sel.value=modelRouting.selections?.[task]||'';
-    sel.disabled=modelRouting.mode!=='manual';
+    sel.disabled=modelRouting.mode==='auto';
     sel.addEventListener('change',()=>{modelRouting.selections={...(modelRouting.selections||{}),[task]:sel.value};});
     const p=document.createElement('p');
     p.textContent=options.length?`${options.length} worker(s) disponível(is). Em Auto o Jev decide por tarefa.`:(task==='image'||task==='video'?'Configure o endpoint de mídia do Chutes no Portainer.':'Nenhum provider configurado.');
@@ -491,7 +491,7 @@ function routingModeChanged(){
 }
 async function saveModelRouting(){
   modelRouting.mode=modelsDialog.querySelector('input[name="routing-mode"]:checked')?.value||'auto';
-  if(modelRouting.mode!=='manual')modelRouting.selections={};
+  if(modelRouting.mode==='auto')modelRouting.selections={};
   if(activeProject){
     const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({modelRouting})});
     activeProject=d.project;modelRouting=d.project.modelRouting||modelRouting;
