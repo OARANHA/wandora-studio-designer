@@ -201,7 +201,7 @@ export function interpretarAjustes(answers,comando,alvo,marcaInput){
     let value=null;
     if(tipo==='solida'&&colors[0])value={tipo:'solida',cores:[colors[0].hex],direcao:'vertical'};
     else if(tipo==='degrade'&&colors[0]){
-      let second=colors[1];if(!second){const dark=luminancia(colors[0].hex)>.6;second={hex:misturar(colors[0].hex,dark?'#000000':'#ffffff',dark?.22:.72)};}
+      let second=colors[1];if(!second){const dark=luminancia(colors[0].hex)>.6;second={hex:misturar(colors[0].hex,dark?'#000000':'#ffffff',dark?0.22:0.72)};}
       value={tipo:'degrade',cores:[colors[0].hex,second.hex],direcao};
     }else if((tipo==='escurecer'||tipo==='clarear')){
       const bg=marca?.cores?.bg;let colorsResolved=[];
