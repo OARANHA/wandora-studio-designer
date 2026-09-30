@@ -1,6 +1,6 @@
-import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderEmail, renderAds } from './render.mjs';
+import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderStories, renderEmail, renderAds, renderManual } from './render.mjs';
 import { sampleGoodVariants, restoreJevChoices } from './variation.mjs';
-import { buildSiteHtml, buildEmailHtml, buildSignatureHtml, buildAdsHtml, buildProjectJson, downloadText, slugify } from './export.mjs';
+import { buildSiteHtml, buildEmailHtml, buildSignatureHtml, buildAdsHtml, buildBrandManualHtml, buildProjectJson, downloadText, slugify } from './export.mjs';
 import { createBackendVoiceCapture, createDecisionScheduler, createSignalCables, mergeTranscriptText } from './live.mjs';
 const $ = (s) => document.querySelector(s);
 const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), providers=$('#providers');
@@ -9,7 +9,7 @@ const createProjectBtn=$('#create-project'), saveVersionBtn=$('#save-version'), 
 const anotherVersionBtn=$('#another-version'), xrayBtn=$('#xray'), backJevBtn=$('#back-jev'), micBtn=$('#mic'), exportBtn=$('#export');
 const commandInput=$('#command'), applyCommandBtn=$('#apply-command'), lockStrip=$('#lock-strip');
 const versionsDialog=$('#versions-dialog'), versionsList=$('#versions-list'), xrayDialog=$('#xray-dialog'), xrayList=$('#xray-list'), xraySummary=$('#xray-summary');
-const exportDialog=$('#export-dialog'), exportSiteBtn=$('#export-site'), exportEmailBtn=$('#export-email'), exportSignatureBtn=$('#export-signature'), copySignatureBtn=$('#copy-signature'), exportAdsBtn=$('#export-ads'), exportJsonBtn=$('#export-json');
+const exportDialog=$('#export-dialog'), exportSiteBtn=$('#export-site'), exportEmailBtn=$('#export-email'), exportSignatureBtn=$('#export-signature'), copySignatureBtn=$('#copy-signature'), exportAdsBtn=$('#export-ads'), exportManualBtn=$('#export-manual'), exportJsonBtn=$('#export-json');
 const openModelsBtn=$('#open-models'), modelsDialog=$('#models-dialog'), modelGrid=$('#model-grid'), modelRouteStatus=$('#model-route-status'), saveModelRoutingBtn=$('#save-model-routing');
 const openAssetsBtn=$('#open-assets'), assetsDialog=$('#assets-dialog'), assetRole=$('#asset-role'), assetFile=$('#asset-file'), uploadAssetBtn=$('#upload-asset'), assetGrid=$('#asset-grid');
 const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGenerateKitBtn=$('#confirm-generate-kit'), kitStatus=$('#kit-status');
@@ -53,6 +53,8 @@ function renderGroupSummary(group,answers,ms=0){
   setSignal(group,ms?`${count} decisões · ${ms} ms`:`${count} decisões`,true);
   const draw={site:renderSite,marca:renderBrand,posts:renderPosts,email:renderEmail,anuncios:renderAds}[group];
   draw?.(latestDecisions,latestCopy,projectV2);
+  if(group==='posts')renderStories(latestDecisions,latestCopy);
+  if(group==='marca')renderManual(latestDecisions,latestCopy,projectV2);
 }
 function resetSignals(){
   latestDecisions={}; latestCopy={}; latestComplete=false; latestVariation=[];
@@ -129,7 +131,7 @@ async function saveVersion(){
   saveVersionBtn.disabled=true; status.textContent='Salvando versão…';
   try{
     await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({briefing:briefing.value})});
-    const d=await json(`/api/projects/${activeProject.id}/versions`,{method:'POST',body:JSON.stringify({briefing:briefing.value,decisions:latestDecisions,copy:latestCopy,reason:'manual',metadata:{decisionCount:Object.values(latestDecisions).reduce((n,g)=>n+Object.keys(g||{}).length,0),variationChanges:latestVariation,lockedChoices,lockedTargets}})});
+    const d=await json(`/api/projects/${activeProject.id}/versions`,{method:'POST',body:JSON.stringify({briefing:briefing.value,decisions:latestDecisions,copy:latestCopy,reason:'manual',metadata:{decisionCount:Object.values(latestDecisions).reduce((n,g)=>n+Object.keys(g||{}).length,0),variationChanges:latestVariation,lockedChoices,lockedTargets,modelRouting,projectV2}})});
     activeProject={...activeProject,versionCount:d.version.number,briefing:briefing.value}; await loadProjects(activeProject.id);
     status.textContent=`Versão ${d.version.number} salva.`;
   }catch(e){status.textContent=e.message;}finally{refreshProjectButtons();}
@@ -153,7 +155,7 @@ async function restoreVersion(id){
   if(!activeProject)return;
   try{
     const d=await json(`/api/projects/${activeProject.id}/versions/${id}`), v=d.version;
-    briefing.value=v.briefing||''; latestDecisions=v.decisions||{}; latestCopy=v.copy||{}; latestVariation=Array.isArray(v.metadata?.variationChanges)?v.metadata.variationChanges:[]; lockedChoices=v.metadata?.lockedChoices&&typeof v.metadata.lockedChoices==='object'?v.metadata.lockedChoices:{}; lockedTargets=v.metadata?.lockedTargets&&typeof v.metadata.lockedTargets==='object'?v.metadata.lockedTargets:{}; renderLocks();
+    briefing.value=v.briefing||''; latestDecisions=v.decisions||{}; latestCopy=v.copy||{}; latestVariation=Array.isArray(v.metadata?.variationChanges)?v.metadata.variationChanges:[]; lockedChoices=v.metadata?.lockedChoices&&typeof v.metadata.lockedChoices==='object'?v.metadata.lockedChoices:{}; lockedTargets=v.metadata?.lockedTargets&&typeof v.metadata.lockedTargets==='object'?v.metadata.lockedTargets:{}; modelRouting=v.metadata?.modelRouting||modelRouting; projectV2=v.metadata?.projectV2||projectV2; renderLocks();
     let total=0; for(const [group,answers] of Object.entries(latestDecisions)){total+=Object.keys(answers||{}).length;setChannel(group,'done');renderGroupSummary(group,answers);}
     latestComplete=total===89; $('#decisoes').textContent=String(total); $('#latencia').textContent='salva'; refreshProjectButtons(); versionsDialog.close();
     status.textContent=`Versão ${v.number} restaurada${latestComplete?' com 89 decisões':''}.`;
@@ -472,6 +474,7 @@ function renderModelGrid(){
   }
 }
 async function openModels(){
+  modelsDialog.querySelectorAll('input[name="routing-mode"]').forEach(r=>{r.checked=r.value===modelRouting.mode;});
   modelsDialog.showModal();modelRouteStatus.textContent='Consultando providers…';
   try{await loadModelCatalog({refresh:true});renderModelGrid();modelRouteStatus.textContent=`${modelCatalog.filter(m=>m.configured).length} worker(s) disponível(is).`;}
   catch(e){modelRouteStatus.textContent=e.message;}
@@ -538,7 +541,7 @@ async function generateCompleteKit(){
 }
 function selectV2Tab(tab){
   document.querySelectorAll('.v2-nav button').forEach(b=>b.classList.toggle('active',b.dataset.v2Tab===tab));
-  const map={site:'.monitor.site',brand:'.monitor.brand-monitor',instagram:'.monitor.posts',email:'.monitor.email',ads:'.monitor.ads'};
+  const map={site:'.monitor.site',brand:'.monitor.brand-monitor',instagram:'.monitor.posts',stories:'.monitor.stories',email:'.monitor.email',ads:'.monitor.ads',manual:'.monitor.manual'};
   document.querySelectorAll('.pieces .monitor').forEach(m=>m.classList.remove('v2-focus'));
   if(map[tab])document.querySelector(map[tab])?.classList.add('v2-focus');
   if(tab==='manual')status.textContent='Manual de Marca V2 usa identidade + ativos; editor dedicado entra nesta base.';
@@ -589,6 +592,12 @@ function exportAds(){
   const ctx=exportContext(); downloadText(`banners-${exportBase()}.html`,buildAdsHtml(ctx),'text/html;charset=utf-8');
   status.textContent='Kit com 6 formatos de banners exportado.';
 }
+function exportManual(){
+  const ctx={...exportContext(),v2:projectV2};
+  downloadText(`manual-${exportBase()}.html`,buildBrandManualHtml(ctx),'text/html;charset=utf-8');
+  status.textContent='Manual de Marca HTML exportado.';
+}
+
 function exportJson(){
   const ctx=exportContext(); downloadText(`projeto-${exportBase()}.json`,buildProjectJson(ctx),'application/json;charset=utf-8');
   status.textContent='Estado do projeto exportado em JSON.';
@@ -808,6 +817,7 @@ exportEmailBtn.addEventListener('click',exportEmail);
 exportSignatureBtn.addEventListener('click',exportSignature);
 copySignatureBtn.addEventListener('click',copySignature);
 exportAdsBtn.addEventListener('click',exportAds);
+exportManualBtn.addEventListener('click',exportManual);
 exportJsonBtn.addEventListener('click',exportJson);
 backJevBtn.addEventListener('click',backToJev);
 setupMic();
