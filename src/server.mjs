@@ -9,6 +9,7 @@ import { nvidiaChat, nvidiaStream } from './ai/nvidia.mjs';
 import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
+import { ROUTE_QUESTIONS, TARGETS, commandQuestions, commandState, routeResult, routeState } from './commands/router.mjs';
 
 assertProductionConfig();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -77,6 +78,43 @@ const server = http.createServer(async (req, res) => {
     }
     const versionMatch=path.match(/^\/api\/projects\/([0-9a-f-]{36})\/versions\/([0-9a-f-]{36})$/i);
     if (versionMatch && req.method === 'GET') return sendJson(res,200,{ok:true,version:await getVersion(session.email,versionMatch[1],versionMatch[2])});
+    if (path === '/api/rota' && req.method === 'POST') {
+      const body=await readJson(req,20_000);
+      const ultima=String(body.ultima||body.comando||'').replace(/\s+/g,' ').trim().slice(0,400);
+      if(ultima.split(/\s+/).filter(Boolean).length<2) throw new HttpError(400,'Frase curta demais.','route_too_short');
+      const started=Date.now();
+      const result=await jevDecide({state:routeState(ultima),questions:ROUTE_QUESTIONS});
+      const route=routeResult(result.answers);
+      return sendJson(res,200,{ok:true,ultima,...route,latency_ms:Date.now()-started,model:result.model||null,usage:result.usage||null,_jev:result.answers});
+    }
+    if (path === '/api/comando' && req.method === 'POST') {
+      const body=await readJson(req,120_000);
+      const comando=String(body.comando||'').replace(/\s+/g,' ').trim().slice(0,400);
+      if(comando.split(/\s+/).filter(Boolean).length<2) throw new HttpError(400,'Diga ou digite o que quer mudar (ex.: “muda o logo pra ficar tipo selo”).','command_too_short');
+      const descricao=String(body.descricao||'').replace(/\s+/g,' ').trim().slice(0,1500);
+      const started=Date.now(), trace=[];
+      let tipo=String(body.tipo||''), alvo=String(body.alvo||''), p_tipo=Number(body.p_tipo)||0, p_alvo=Number(body.p_alvo)||0;
+      const validType=['descrever_negocio','comando_de_edicao','desfazer','fixar','outra'].includes(tipo);
+      const validTarget=[...Object.keys(TARGETS),'tudo','nenhum'].includes(alvo);
+      if(!validType||!validTarget){
+        const routed=await jevDecide({state:routeState(comando),questions:ROUTE_QUESTIONS});
+        const rr=routeResult(routed.answers); tipo=rr.tipo;alvo=rr.alvo;p_tipo=rr.p_tipo;p_alvo=rr.p_alvo;
+        trace.push({kind:'rota',model:routed.model||null,usage:routed.usage||null,answers:routed.answers});
+      }
+      if(tipo!=='comando_de_edicao'){
+        return sendJson(res,200,{ok:true,tipo,alvo,p_tipo,p_alvo,answers:null,modo:'nenhum',ajustes:[],answers_ajuste:null,latency_ms:Date.now()-started,_jev:trace});
+      }
+      if(!TARGETS[alvo]){
+        return sendJson(res,200,{ok:true,tipo,alvo,p_tipo,p_alvo,answers:null,modo:alvo==='tudo'?'biblioteca':'nenhum',ajustes:[],answers_ajuste:null,latency_ms:Date.now()-started,_jev:trace});
+      }
+      const atuaisRaw=body.atuais&&typeof body.atuais==='object'&&!Array.isArray(body.atuais)?body.atuais:{};
+      const atuais=Object.fromEntries(TARGETS[alvo].map(id=>[id,String(atuaisRaw[id]??'?').slice(0,80)]));
+      const questions=commandQuestions(alvo,atuais);
+      const decided=await jevDecide({state:commandState(descricao,comando,atuais),questions});
+      trace.push({kind:'decisao',model:decided.model||null,usage:decided.usage||null,answers:decided.answers});
+      return sendJson(res,200,{ok:true,tipo,alvo,p_tipo,p_alvo,answers:decided.answers,modo:'biblioteca',ajustes:[],answers_ajuste:null,latency_ms:Date.now()-started,_jev:trace});
+    }
+
     if (path === '/api/decide/understanding' && req.method === 'POST') {
       const body=await readJson(req,20_000); const text=String(body.texto||'').replace(/\s+/g,' ').trim();
       if (text.split(/\s+/).length < 2) throw new HttpError(400,'Descreva o negócio com pelo menos algumas palavras.','text_too_short');
