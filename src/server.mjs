@@ -7,7 +7,7 @@ import { authenticate, clearCookieHeader, cookieHeader, logout, sessionFromReque
 import { jevDecide } from './ai/jev.mjs';
 import { nvidiaChat, nvidiaStream } from './ai/nvidia.mjs';
 import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
-import { QUESTION_GROUPS, GROUP_META, QUESTION_TOTAL } from './questions/catalog.mjs';
+import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
 
 assertProductionConfig();
@@ -52,6 +52,10 @@ const server = http.createServer(async (req, res) => {
 
     const session = requireAuth(req,res); if(!session) return;
     if (path === '/api/auth/me') return sendJson(res,200,{ok:true,user:{email:session.email}});
+    if (path === '/api/questions') {
+      const questions=Object.fromEntries(Object.entries(QUESTION_GROUPS).map(([group,items])=>[group,Object.fromEntries(Object.entries(items).map(([id,q])=>[id,{label:QUESTION_META[id]?.label||id,type:q.type,instructions:q.instructions||'',options:q.type==='choice'?q.criteria:q.type==='score'?q.criteria:null}]))]));
+      return sendJson(res,200,{ok:true,groups:GROUP_META,questions,total:QUESTION_TOTAL});
+    }
     if (path === '/api/config') return sendJson(res,200,{ok:true,domain:config.publicUrl,providers:{jev:{configured:!!config.jev.apiKey,base_url:config.jev.baseUrl,model:config.jev.model||null},nvidia:{configured:!!config.nvidia.apiKey,base_url:config.nvidia.baseUrl,model:config.nvidia.model}},groups:Object.fromEntries(Object.entries(GROUP_META).map(([id,g])=>[id,g.count])),total:QUESTION_TOTAL});
     if (path === '/api/projects' && req.method === 'GET') return sendJson(res,200,{ok:true,projects:await listProjects(session.email),limits:projectLimits});
     if (path === '/api/projects' && req.method === 'POST') {
@@ -147,7 +151,7 @@ const server = http.createServer(async (req, res) => {
       const upstream=await nvidiaChat({messages,model:body.model,temperature:body.temperature,top_p:body.top_p,max_tokens:body.max_tokens,stream:false});
       return sendJson(res,200,{ok:true,model:upstream.model,choices:upstream.choices,usage:upstream.usage});
     }
-    if (path === '/' || path === '/index.html' || path === '/studio.js' || path === '/render.mjs') { const target = path === '/' ? '/index.html' : path; if (await serveStatic(res,PUBLIC,target)) return; }
+    if (path === '/' || path === '/index.html' || path === '/studio.js' || path === '/render.mjs' || path === '/variation.mjs') { const target = path === '/' ? '/index.html' : path; if (await serveStatic(res,PUBLIC,target)) return; }
     sendJson(res,404,{ok:false,error:'Não encontrado.',code:'not_found'});
   } catch (e) {
     const status=e instanceof HttpError?e.status:500;
