@@ -43,6 +43,7 @@ function renderGroupSummary(group,answers,ms=0){
 }
 function resetSignals(){
   latestDecisions={}; latestCopy={}; latestComplete=false; latestVariation=[];
+  lockedChoices={}; lockedTargets={}; commandHistory=[]; renderLocks();
   saveVersionBtn.disabled=true;
   resetPieces();
   const summary=$('#understanding-summary'); summary.hidden=true; summary.replaceChildren();
