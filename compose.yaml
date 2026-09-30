@@ -5,8 +5,24 @@ services:
       dockerfile: Dockerfile
     container_name: wandora-studio-designer
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3210}
+      PUBLIC_URL: ${PUBLIC_URL:-https://designer-vigia.wandora.com.br}
+      DATA_DIR: ${DATA_DIR:-/app/data}
+      SESSION_DAYS: ${SESSION_DAYS:-30}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      STUDIO_ADMIN_EMAIL: ${STUDIO_ADMIN_EMAIL:-admin@wandora.com.br}
+      STUDIO_ADMIN_PASSWORD_HASH: ${STUDIO_ADMIN_PASSWORD_HASH:-}
+      STUDIO_DEV_PASSWORD: ${STUDIO_DEV_PASSWORD:-}
+      JEV_BASE_URL: ${JEV_BASE_URL:-https://api.typesafe.ai}
+      JEV_API_KEY: ${JEV_API_KEY:-}
+      JEV_MODEL: ${JEV_MODEL:-jev-latest}
+      JEV_TIMEOUT_MS: ${JEV_TIMEOUT_MS:-20000}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-openai/gpt-oss-20b}
+      NVIDIA_TIMEOUT_MS: ${NVIDIA_TIMEOUT_MS:-120000}
     ports:
       - "127.0.0.1:${STUDIO_HOST_PORT:-3210}:${PORT:-3210}"
     volumes:
