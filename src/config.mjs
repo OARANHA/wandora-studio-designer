@@ -8,6 +8,7 @@ export const config = Object.freeze({
   env: process.env.NODE_ENV || 'development',
   port: int('PORT', 3210, 1, 65535),
   publicUrl: process.env.PUBLIC_URL || 'http://127.0.0.1:3210',
+  dataDir: process.env.DATA_DIR || (process.env.NODE_ENV === 'production' ? '/app/data' : './data-runtime'),
   sessionDays: int('SESSION_DAYS', 30, 1, 365),
   sessionSecret: process.env.SESSION_SECRET || '',
   adminEmail: (process.env.STUDIO_ADMIN_EMAIL || 'admin@wandora.local').trim().toLowerCase(),
@@ -16,7 +17,7 @@ export const config = Object.freeze({
   jev: {
     baseUrl: (process.env.JEV_BASE_URL || 'https://api.typesafe.ai').replace(/\/$/, ''),
     apiKey: process.env.JEV_API_KEY || '',
-    model: process.env.JEV_MODEL || '',
+    model: process.env.JEV_MODEL || 'jev-latest',
     timeoutMs: int('JEV_TIMEOUT_MS', 20_000, 1_000, 60_000),
   },
   nvidia: {

@@ -7,6 +7,7 @@ import { authenticate, clearCookieHeader, cookieHeader, logout, sessionFromReque
 import { jevDecide } from './ai/jev.mjs';
 import { nvidiaChat } from './ai/nvidia.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_TOTAL } from './questions/catalog.mjs';
+import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
 
 assertProductionConfig();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -51,6 +52,26 @@ const server = http.createServer(async (req, res) => {
     const session = requireAuth(req,res); if(!session) return;
     if (path === '/api/auth/me') return sendJson(res,200,{ok:true,user:{email:session.email}});
     if (path === '/api/config') return sendJson(res,200,{ok:true,domain:config.publicUrl,providers:{jev:{configured:!!config.jev.apiKey,base_url:config.jev.baseUrl,model:config.jev.model||null},nvidia:{configured:!!config.nvidia.apiKey,base_url:config.nvidia.baseUrl,model:config.nvidia.model}},groups:Object.fromEntries(Object.entries(GROUP_META).map(([id,g])=>[id,g.count])),total:QUESTION_TOTAL});
+    if (path === '/api/projects' && req.method === 'GET') return sendJson(res,200,{ok:true,projects:await listProjects(session.email),limits:projectLimits});
+    if (path === '/api/projects' && req.method === 'POST') {
+      const body=await readJson(req,30_000);
+      const project=await createProject({owner:session.email,name:body.name,clientName:body.clientName,briefing:body.briefing});
+      return sendJson(res,201,{ok:true,project});
+    }
+    const projectMatch=path.match(/^\/api\/projects\/([0-9a-f-]{36})$/i);
+    if (projectMatch && req.method === 'GET') return sendJson(res,200,{ok:true,project:await getProject(session.email,projectMatch[1])});
+    if (projectMatch && (req.method === 'PATCH' || req.method === 'POST')) {
+      const body=await readJson(req,30_000); const project=await updateProject(session.email,projectMatch[1],body);
+      return sendJson(res,200,{ok:true,project});
+    }
+    const versionsMatch=path.match(/^\/api\/projects\/([0-9a-f-]{36})\/versions$/i);
+    if (versionsMatch && req.method === 'GET') return sendJson(res,200,{ok:true,versions:await listVersions(session.email,versionsMatch[1])});
+    if (versionsMatch && req.method === 'POST') {
+      const body=await readJson(req,700_000); const version=await createVersion(session.email,versionsMatch[1],body);
+      return sendJson(res,201,{ok:true,version});
+    }
+    const versionMatch=path.match(/^\/api\/projects\/([0-9a-f-]{36})\/versions\/([0-9a-f-]{36})$/i);
+    if (versionMatch && req.method === 'GET') return sendJson(res,200,{ok:true,version:await getVersion(session.email,versionMatch[1],versionMatch[2])});
     if (path === '/api/decide/understanding' && req.method === 'POST') {
       const body=await readJson(req,20_000); const text=String(body.texto||'').replace(/\s+/g,' ').trim();
       if (text.split(/\s+/).length < 2) throw new HttpError(400,'Descreva o negócio com pelo menos algumas palavras.','text_too_short');
