@@ -2,10 +2,11 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config, assertProductionConfig } from './config.mjs';
-import { HttpError, clientIp, readForm, readJson, redirect, sendJson, serveStatic } from './lib/http.mjs';
+import { HttpError, clientIp, readBuffer, readForm, readJson, redirect, sendJson, serveStatic } from './lib/http.mjs';
 import { authenticate, clearCookieHeader, cookieHeader, logout, sessionFromRequest } from './auth/auth.mjs';
 import { jevDecide } from './ai/jev.mjs';
 import { nvidiaChat, nvidiaStream } from './ai/nvidia.mjs';
+import { nvidiaTranscribeWav } from './ai/nvidia-asr.mjs';
 import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
@@ -210,6 +211,16 @@ const server = http.createServer(async (req, res) => {
       const settled=await Promise.all(jobs);
       if(!controller.signal.aborted){ event('done',{seq,ok:settled.every(x=>x.ok),groups:settled,ms:Date.now()-started}); res.end(); }
       return;
+    }
+    if (path === '/api/transcribe' && req.method === 'POST') {
+      const type=String(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();
+      if(type!=='audio/wav' && type!=='audio/x-wav') throw new HttpError(415,'Envie áudio WAV.','unsupported_audio');
+      const audio=await readBuffer(req,1_500_000);
+      const controller=new AbortController();
+      res.on('close',()=>controller.abort());
+      const started=Date.now();
+      const result=await nvidiaTranscribeWav(audio,{signal:controller.signal});
+      return sendJson(res,200,{ok:true,text:result.text,provider:result.provider,language:result.language,ms:Date.now()-started});
     }
     if (path === '/api/escrever' && req.method === 'POST') {
       const body=await readJson(req,500_000);
