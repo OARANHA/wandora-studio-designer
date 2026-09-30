@@ -12,6 +12,7 @@ const versionsDialog=$('#versions-dialog'), versionsList=$('#versions-list'), xr
 const exportDialog=$('#export-dialog'), exportSiteBtn=$('#export-site'), exportEmailBtn=$('#export-email'), exportSignatureBtn=$('#export-signature'), copySignatureBtn=$('#copy-signature'), exportAdsBtn=$('#export-ads'), exportJsonBtn=$('#export-json');
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
+const voiceDiag=$('#voice-diag'), voiceStages=Object.fromEntries([...voiceDiag.querySelectorAll('[data-stage]')].map(el=>[el.dataset.stage,el]));
 let recognition=null, micListening=false, micWanted=false, micBaseText='', micFinalText='', micInterimText='', voiceMeter=null, liveUpdateCount=0;
 const labels={seg:'Segmento',pers:'Personalidade',pub:'Público',obj:'Objetivo',canal:'Canal',preco:'Preço',mat:'Maturidade',dif:'Diferencial',oferta:'Oferta',emoji:'Emojis'};
 const channel={entender:$('#ch-entender'),site:$('#ch-site'),marca:$('#ch-marca'),posts:$('#ch-posts'),email:$('#ch-email'),anuncios:$('#ch-anuncios')};
@@ -445,6 +446,15 @@ function exportJson(){
   status.textContent='Estado do projeto exportado em JSON.';
 }
 
+function voiceStage(name,state='active',title=''){
+  const el=voiceStages[name]; if(!el)return;
+  el.classList.remove('active','ok','error');
+  if(state)el.classList.add(state);
+  if(title)el.title=title;
+}
+function resetVoiceStages(){
+  for(const el of Object.values(voiceStages)){el.classList.remove('active','ok','error');el.title='';}
+}
 function setMicState(listening,message=''){
   micListening=!!listening;
   micBtn.classList.toggle('is-listening',micListening);
@@ -482,34 +492,82 @@ function setupMic(){
   const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SpeechRecognition){
     micBtn.disabled=true; micBtn.title='Reconhecimento de voz não disponível neste navegador.';
+    voiceStage('audio','error','Web Speech API indisponível');
+    status.textContent='Este navegador não tem reconhecimento de voz. Use Chrome, Edge ou Safari.';
     return;
   }
+
   recognition=new SpeechRecognition();
   recognition.lang='pt-BR';
   recognition.continuous=true;
   recognition.interimResults=true;
   recognition.maxAlternatives=1;
-  let resultSeen=false, speechSeen=false, speechTimer=null;
+
+  let resultSeen=false, speechSeen=false, speechTimer=null, localMode=false;
   const clearSpeechTimer=()=>{if(speechTimer){clearTimeout(speechTimer);speechTimer=null;}};
+
+  async function startRecognitionPreferred(){
+    resetVoiceStages();
+    voiceStage('audio','active','Preparando reconhecimento');
+    if(!micWanted)return;
+    try{
+      const canLocal=typeof SpeechRecognition.available==='function'
+        && typeof SpeechRecognition.install==='function'
+        && 'processLocally' in recognition;
+      if(canLocal){
+        let availability='unavailable';
+        try{
+          availability=await SpeechRecognition.available({langs:['pt-BR'],processLocally:true,quality:'dictation'});
+        }catch{
+          try{availability=await SpeechRecognition.available({langs:['pt-BR'],processLocally:true});}catch{}
+        }
+        if(!micWanted)return;
+        if(availability==='available'){
+          recognition.processLocally=true; localMode=true;
+          status.textContent='🎙️ Reconhecimento pt-BR local pronto · ligando microfone…';
+        }else if(availability==='downloadable'||availability==='downloading'){
+          status.textContent='⬇️ Preparando reconhecimento pt-BR no próprio navegador…';
+          let installed=false;
+          try{installed=await SpeechRecognition.install({langs:['pt-BR'],processLocally:true,quality:'dictation'});}
+          catch{try{installed=await SpeechRecognition.install({langs:['pt-BR'],processLocally:true});}catch{}}
+          if(!micWanted)return;
+          recognition.processLocally=!!installed; localMode=!!installed;
+          status.textContent=installed?'✓ Português instalado · ligando microfone…':'Reconhecimento local indisponível · usando serviço do navegador…';
+        }else{
+          recognition.processLocally=false; localMode=false;
+        }
+      }
+      recognition.start();
+    }catch(e){
+      micWanted=false; closeTranscript(); voiceStage('audio','error',e?.name||'falha');
+      status.textContent='⚠️ Não foi possível ligar o reconhecimento de voz neste navegador.';
+    }
+  }
+
   recognition.onstart=()=>{
     resultSeen=false; speechSeen=false; clearSpeechTimer();
-    setMicState(true,'🎙️ Ouvindo em português. Fale normalmente — o Studio atualiza durante a frase.');
+    setMicState(true,localMode?'🎙️ Ouvindo em português · reconhecimento local.':'🎙️ Ouvindo em português · reconhecimento do navegador.');
     paintTranscript();
+    voiceStage('audio','ok',localMode?'Reconhecimento local ativo':'Reconhecimento ativo');
     setTimeout(()=>{if(micWanted)void startVoiceMeter();},180);
   };
   recognition.onaudiostart=()=>{
+    voiceStage('audio','ok','Fluxo de áudio ativo');
     if(micWanted)status.textContent='🎙️ Microfone ativo · aguardando sua fala…';
   };
   recognition.onspeechstart=()=>{
-    speechSeen=true;
+    speechSeen=true; voiceStage('speech','ok','Fala detectada');
     if(micWanted)status.textContent='🎙️ Fala detectada · transcrevendo ao vivo…';
     clearSpeechTimer();
     speechTimer=setTimeout(()=>{
-      if(micWanted&&!resultSeen)status.textContent='⚠️ Som detectado, mas o navegador ainda não entregou a transcrição. Continue falando ou toque MIC para reiniciar.';
+      if(micWanted&&!resultSeen){
+        voiceStage('text','error','Sem resultado de transcrição');
+        status.textContent='⚠️ O áudio e a fala chegaram, mas ainda não veio texto do reconhecedor.';
+      }
     },4500);
   };
   recognition.onresult=(event)=>{
-    resultSeen=true; clearSpeechTimer();
+    resultSeen=true; clearSpeechTimer(); voiceStage('text','ok','Texto recebido');
     let interim='';
     for(let i=event.resultIndex;i<event.results.length;i++){
       const text=(event.results[i][0]?.transcript||'').trim();
@@ -524,7 +582,8 @@ function setupMic(){
     decisionScheduler.schedule();
   };
   recognition.onnomatch=()=>{
-    status.textContent='⚠️ Ouvi áudio, mas não consegui reconhecer palavras. Fale um pouco mais perto do microfone.';
+    voiceStage('text','error','Áudio sem palavras reconhecidas');
+    status.textContent='⚠️ Ouvi áudio, mas não consegui reconhecer palavras.';
   };
   recognition.onerror=(event)=>{
     clearSpeechTimer();
@@ -532,38 +591,34 @@ function setupMic(){
     if(code==='no-speech'||code==='aborted')return;
     const friendly={
       'not-allowed':'O navegador bloqueou o microfone. Libere o acesso no cadeado da barra de endereço.',
-      'service-not-allowed':'O reconhecimento de voz não está liberado neste navegador. Use Chrome, Edge ou Safari.',
+      'service-not-allowed':'O serviço de reconhecimento de voz foi bloqueado pelo navegador.',
       'audio-capture':'Nenhum microfone encontrado.',
-      'network':'O áudio chegou, mas o serviço de reconhecimento de voz do navegador falhou na rede. Toque MIC para tentar novamente.',
-      'language-not-supported':'O reconhecimento de voz em português não está disponível neste navegador.'
-    }[code]||`O reconhecimento de voz parou (${code}). Toque MIC para tentar novamente.`;
-    micWanted=false;
-    voiceMeter?.stop?.(); voiceMeter=null;
-    setMicState(false);
-    closeTranscript();
+      'network':'O serviço remoto de reconhecimento de voz falhou na rede.',
+      'language-not-supported':'Português não está disponível nesse modo de reconhecimento.',
+      'language-unavailable':'O pacote de português está indisponível nesse modo.'
+    }[code]||`O reconhecimento de voz parou (${code}).`;
+    voiceStage(speechSeen?'text':'audio','error',code);
+    micWanted=false; voiceMeter?.stop?.(); voiceMeter=null;
+    setMicState(false); closeTranscript();
     status.textContent='⚠️ '+friendly;
   };
   recognition.onend=()=>{
-    clearSpeechTimer();
-    setMicState(false);
+    clearSpeechTimer(); setMicState(false);
     if(micWanted&&document.visibilityState==='visible'){
-      setTimeout(()=>{try{recognition.start();}catch{micWanted=false;status.textContent='⚠️ Não foi possível reiniciar o reconhecimento de voz.';}},180);
+      setTimeout(()=>{void startRecognitionPreferred();},220);
       return;
     }
     voiceMeter?.stop?.(); voiceMeter=null; closeTranscript();
   };
+
   micBtn.disabled=false;
   micBtn.title='Voz ao vivo em português do Brasil';
   micBtn.addEventListener('click',()=>{
     if(micWanted||micListening){stopMic();return;}
-    micWanted=true;
+    micWanted=true; localMode=false;
     micBaseText=briefing.value.trim(); micFinalText=''; micInterimText='';
     paintTranscript();
-    try{recognition.start();}
-    catch{
-      micWanted=false; closeTranscript();
-      status.textContent='⚠️ Não foi possível ligar o reconhecimento de voz neste navegador.';
-    }
+    void startRecognitionPreferred();
   });
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden&&micWanted)stopMic('Microfone desligado enquanto a aba estava em segundo plano.');
@@ -588,6 +643,7 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
   Object.keys(channel).forEach(g=>setChannel(g,'working'));
   Object.keys(signal).forEach(g=>setSignal(g,'recebendo…',false));
   cables.start();
+  voiceStage('jev','active','Enviando ao Jev');
   status.textContent=live?'🎙️ Ouvindo… nova direção de arte em processamento.':'Abrindo os 6 canais do Jev…';
   const started=performance.now(); let decisions=0, failures=0;
   try{
@@ -607,7 +663,7 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
       } else if(event==='done'){
         const total=Math.round(performance.now()-started);
         $('#latencia').textContent=`${total} ms`;
-        latestComplete=d.ok&&decisions===89; liveUpdateCount+=latestComplete?1:0; refreshProjectButtons();
+        latestComplete=d.ok&&decisions===89; liveUpdateCount+=latestComplete?1:0; refreshProjectButtons(); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
         status.textContent=live&&micWanted
           ?`🎙️ Ouvindo… 89 decisões atualizadas em ${total} ms · atualização ${liveUpdateCount}. Continue falando.`
           :latestComplete?'89 decisões prontas. Você já pode salvar esta versão.':`Canais concluídos com ${failures} erro(s).`;
