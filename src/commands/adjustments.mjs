@@ -168,7 +168,7 @@ export function rotuloAjuste(a){
   if(a.prop==='cor_texto'){const v=typeof a.valor==='string'?(a.valor==='claro'?'Letras mais claras':'Letras mais escuras'):`Cor das letras: ${colorName(a.valor.cor)}`;return `${v} ${l}${a.pecas.length===PECAS.length?'':ps}`.trim();}
   return `${map[a.prop]?.[a.valor]||a.prop} ${l}${a.pecas.length===PECAS.length?'':ps}`.replace(/\s+/g,' ').trim();
 }
-function adjustment(prop,pieces,element,value,p,command){const a={id:`${prop}|${pieces.join('+')}|${element}`,prop,pieces,element,value,p:Number(p.toFixed?.(2)??p),comando:command};a.rotulo=rotuloAjuste(a);return a;}
+function adjustment(prop,pieces,element,value,p,command){const a={id:`${prop}|${pieces.join('+')}|${element}`,prop,pecas:pieces,elemento:element,valor:value,p:Number(p.toFixed?.(2)??p),comando:command};a.rotulo=rotuloAjuste(a);return a;}
 function explicitFor(items,role){return items.filter(c=>c.papel===role||c.papel==null);}
 function colorFromAnswer(a,nullId,marca){
   if(pRequested(a,nullId)<LIMIAR)return null;const [id]=best(a,[nullId]);return id?resolverCor(id,marca):null;
