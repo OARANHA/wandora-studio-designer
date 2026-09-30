@@ -31,6 +31,9 @@ jobs:
           node --check src/ai/nvidia.mjs
           node --check src/ai/speech.mjs
           node --check src/ai/writer.mjs
+          node --check src/store/assets.mjs
+          node --check src/ai/model-registry.mjs
+          node --check src/ai/chutes.mjs
           node --check src/commands/router.mjs
           node --check src/commands/adjustments.mjs
           node --check public/studio.js
