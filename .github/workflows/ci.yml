@@ -30,6 +30,7 @@ jobs:
           node --check src/ai/jev.mjs
           node --check src/ai/nvidia.mjs
           node --check src/ai/writer.mjs
+          node --check src/commands/router.mjs
           node --check public/studio.js
           node --check public/render.mjs
           node --check public/variation.mjs
