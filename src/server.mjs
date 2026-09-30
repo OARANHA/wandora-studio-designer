@@ -111,7 +111,7 @@ const server = http.createServer(async (req, res) => {
       const upstream=await nvidiaChat({messages,model:body.model,temperature:body.temperature,top_p:body.top_p,max_tokens:body.max_tokens,stream:false});
       return sendJson(res,200,{ok:true,model:upstream.model,choices:upstream.choices,usage:upstream.usage});
     }
-    if (path === '/' || path === '/index.html' || path === '/studio.js') { const target = path === '/' ? '/index.html' : path; if (await serveStatic(res,PUBLIC,target)) return; }
+    if (path === '/' || path === '/index.html' || path === '/studio.js' || path === '/render.mjs') { const target = path === '/' ? '/index.html' : path; if (await serveStatic(res,PUBLIC,target)) return; }
     sendJson(res,404,{ok:false,error:'Não encontrado.',code:'not_found'});
   } catch (e) {
     const status=e instanceof HttpError?e.status:500;
