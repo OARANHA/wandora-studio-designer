@@ -14,7 +14,7 @@ const openModelsBtn=$('#open-models'), modelsDialog=$('#models-dialog'), modelGr
 const openAssetsBtn=$('#open-assets'), assetsDialog=$('#assets-dialog'), assetRole=$('#asset-role'), assetFile=$('#asset-file'), uploadAssetBtn=$('#upload-asset'), assetGrid=$('#asset-grid');
 const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGenerateKitBtn=$('#confirm-generate-kit'), kitStatus=$('#kit-status');
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
-let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[];
+let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}};
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
 const voiceDiag=$('#voice-diag'), voiceStages=Object.fromEntries([...voiceDiag.querySelectorAll('[data-stage]')].map(el=>[el.dataset.stage,el]));
 let micListening=false, micWanted=false, micBaseText='', micFinalText='', micInterimText='', voiceCapture=null, voiceSession=0, liveUpdateCount=0;
@@ -52,7 +52,7 @@ function renderGroupSummary(group,answers,ms=0){
   if(group==='entender'){ renderUnderstanding(answers); return; }
   setSignal(group,ms?`${count} decisões · ${ms} ms`:`${count} decisões`,true);
   const draw={site:renderSite,marca:renderBrand,posts:renderPosts,email:renderEmail,anuncios:renderAds}[group];
-  draw?.(latestDecisions,latestCopy);
+  draw?.(latestDecisions,latestCopy,projectV2);
 }
 function resetSignals(){
   latestDecisions={}; latestCopy={}; latestComplete=false; latestVariation=[];
@@ -99,8 +99,12 @@ async function loadProjects(selectId=null){
   const previous=selectId || activeProject?.id || projectSelect.value;
   projectSelect.replaceChildren(new Option('Novo projeto…',''));
   for(const p of d.projects) projectSelect.add(new Option(`${p.name}${p.versionCount?` · v${p.versionCount}`:''}`,p.id));
-  if(previous && d.projects.some(p=>p.id===previous)){ projectSelect.value=previous; activeProject=d.projects.find(p=>p.id===previous); }
-  else if(!previous){ activeProject=null; projectSelect.value=''; }
+  if(previous && d.projects.some(p=>p.id===previous)){
+    projectSelect.value=previous; activeProject=d.projects.find(p=>p.id===previous);
+    modelRouting=activeProject.modelRouting||{mode:'auto',selections:{}};
+    projectV2=activeProject.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}};
+  }
+  else if(!previous){ activeProject=null; projectSelect.value=''; modelRouting={mode:'auto',selections:{}}; projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}}; }
   refreshProjectButtons();
 }
 async function createProject(){
@@ -108,15 +112,15 @@ async function createProject(){
   createProjectBtn.disabled=true;
   try{
     const d=await json('/api/projects',{method:'POST',body:JSON.stringify({name,clientName:clientName.value,briefing:briefing.value})});
-    activeProject=d.project; projectName.value=''; clientName.value=''; await loadProjects(d.project.id);
+    activeProject=d.project; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}}; projectName.value=''; clientName.value=''; await loadProjects(d.project.id);
     status.textContent=`Projeto “${d.project.name}” criado.`;
   }catch(e){status.textContent=e.message;}finally{createProjectBtn.disabled=false;}
 }
 async function selectProject(){
   const id=projectSelect.value;
-  if(!id){activeProject=null;modelRouting={mode:'auto',selections:{}};refreshProjectButtons();status.textContent='Novo projeto: dê um nome e crie quando quiser salvar versões.';return;}
+  if(!id){activeProject=null;modelRouting={mode:'auto',selections:{}};projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}};refreshProjectButtons();status.textContent='Novo projeto: dê um nome e crie quando quiser salvar versões.';return;}
   try{
-    const d=await json(`/api/projects/${id}`); activeProject=d.project; briefing.value=d.project.briefing||''; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; resetSignals(); refreshProjectButtons();
+    const d=await json(`/api/projects/${id}`); activeProject=d.project; briefing.value=d.project.briefing||''; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}}; resetSignals(); refreshProjectButtons();
     status.textContent=`Projeto “${d.project.name}” carregado · ${d.project.versionCount||0} versão(ões) · modelos ${modelRouting.mode}.`;
   }catch(e){status.textContent=e.message;}
 }
@@ -173,7 +177,7 @@ async function anotherVersion(){
   const result=sampleGoodVariants(latestDecisions);
   if(!result.changes.length){status.textContent='O Jev não deixou alternativas boas o bastante para sortear.';return;}
   latestDecisions=result.decisions; latestVariation=result.changes;
-  renderAll(latestDecisions,latestCopy); refreshProjectButtons();
+  renderAll(latestDecisions,latestCopy,projectV2); refreshProjectButtons();
   const byGroup=Object.groupBy?Object.groupBy(result.changes,c=>c.group):result.changes.reduce((m,c)=>((m[c.group]??=[]).push(c),m),{});
   for(const [group,items] of Object.entries(byGroup)) if(group!=='entender')setSignal(group,`🎲 ${items.length} sorteada(s)`,true);
   let info=null; try{info=await loadQuestionInfo();}catch{}
@@ -186,7 +190,7 @@ async function anotherVersion(){
 function backToJev(){
   if(!latestVariation.length)return;
   const r=restoreJevChoices(latestDecisions);
-  latestDecisions=r.decisions; latestVariation=[]; renderAll(latestDecisions,latestCopy);
+  latestDecisions=r.decisions; latestVariation=[]; renderAll(latestDecisions,latestCopy,projectV2);
   for(const [group,answers] of Object.entries(latestDecisions)) if(group!=='entender')renderGroupSummary(group,answers);
   refreshProjectButtons(); status.textContent=`Versão do Jev restaurada · ${r.count} escolha(s) voltaram ao 1º lugar.`;
 }
@@ -295,7 +299,7 @@ async function undoTarget(target){
       if(id in (snap.lockedChoices||{}))lockedChoices[id]=snap.lockedChoices[id];else delete lockedChoices[id];
     }
     if(snap.lockedTargets?.[target])lockedTargets[target]=structuredClone(snap.lockedTargets[target]);else delete lockedTargets[target];
-    latestVariation=[];renderAll(latestDecisions,latestCopy);renderLocks();refreshProjectButtons();
+    latestVariation=[];renderAll(latestDecisions,latestCopy,projectV2);renderLocks();refreshProjectButtons();
     status.textContent=`${prettyId(target)} voltou para a versão anterior.`;return true;
   }
   status.textContent=`Não encontrei uma versão anterior diferente de ${prettyId(target)}.`;return false;
@@ -322,6 +326,34 @@ function applyLibraryAnswers(target,answers){
   }
   return changed;
 }
+function applySiteRouteClient(route){
+  const current=projectV2.siteStructure||{hero:{enabled:true,variant:'split'},sections:[]};
+  const next={hero:{enabled:current.hero?.enabled!==false,variant:current.hero?.variant||'split'},sections:[...(current.sections||[])]};
+  if(route.section==='hero'){
+    if(route.operation==='remove')next.hero.enabled=false;
+    if(route.operation==='add'||route.operation==='edit'){next.hero.enabled=true;next.hero.variant=route.heroVariant||next.hero.variant;}
+  }else{
+    if(route.operation==='add'||route.operation==='edit'){if(!next.sections.includes(route.section))next.sections.push(route.section);}
+    if(route.operation==='remove')next.sections=next.sections.filter(x=>x!==route.section);
+    if(route.operation==='reorder'&&next.sections.includes(route.section)){next.sections=next.sections.filter(x=>x!==route.section);next.sections.unshift(route.section);}
+  }
+  projectV2={...projectV2,siteStructure:next};
+  return next;
+}
+async function tryStructuralSiteCommand(comando,target,tipo){
+  if(target!=='site'||tipo!=='comando_de_edicao')return false;
+  const route=await json('/api/v2/site-command',{method:'POST',body:JSON.stringify({command:comando,briefing:briefing.value,current:projectV2.siteStructure||{}})});
+  if(!route.ok||route.operation==='none')return false;
+  applySiteRouteClient(route);
+  if(activeProject){
+    const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({v2:projectV2})});
+    activeProject=d.project;projectV2=d.project.v2||projectV2;
+  }
+  renderAll(latestDecisions,latestCopy,projectV2);
+  commandInput.value='';
+  status.textContent=`🏗️ Site: ${route.operation} · ${route.section}${route.section==='hero'?` · ${route.heroVariant}`:''}.`;
+  return true;
+}
 async function applyCommand(){
   const comando=commandInput.value.trim();
   if(!latestComplete||comando.split(/\s+/).length<2){status.textContent='Digite o que quer mudar em algumas palavras.';return;}
@@ -337,6 +369,7 @@ async function applyCommand(){
     }
     if(resp.tipo==='outra'){status.textContent='Não parece um pedido de mudança.';return;}
     const target=resp.alvo;
+    if(await tryStructuralSiteCommand(comando,target,resp.tipo))return;
     if(resp.tipo==='fixar'){
       if(!questionInfo?.targets?.[target])await loadQuestionInfo();
       if(!questionInfo?.targets?.[target]){status.textContent='Entendi que quer fixar, mas não qual peça.';return;}
@@ -352,7 +385,7 @@ async function applyCommand(){
       snapshotStudio('comando',target);
       const changed=applyLibraryAnswers(target,resp.answers);
       await lockTarget(target,`seu comando: ${comando}`);
-      latestVariation=[];renderAll(latestDecisions,latestCopy);renderLocks();commandInput.value='';refreshProjectButtons();
+      latestVariation=[];renderAll(latestDecisions,latestCopy,projectV2);renderLocks();commandInput.value='';refreshProjectButtons();
       status.textContent=changed?`🎯 ${prettyId(target)} alterado e travado · ${changed} decisão(ões).`:`${prettyId(target)} → o Jev achou que já estava assim; peça travada.`;
       return;
     }
@@ -388,13 +421,13 @@ async function generateCopy(){
       if(event==='inicio') status.textContent=`${String(d.provider||'IA').toUpperCase()} · ${d.model} · ${d.route?.reason||'iniciando…'}`;
       if(event==='tok' && d.fields){
         latestCopy=copyShape(d.fields);
-        renderAll(latestDecisions,latestCopy);
+        renderAll(latestDecisions,latestCopy,projectV2);
         const n=Object.values(d.fields).filter(Boolean).length;
         status.textContent=`IA escrevendo… ${n}/11 campos`;
       }
       if(event==='fim'){
         latestCopy=copyShape(d.fields||{});
-        renderAll(latestDecisions,latestCopy);
+        renderAll(latestDecisions,latestCopy,projectV2);
         status.textContent=d.complete?`11 textos prontos · primeira palavra em ${d.first_token_ms??'—'} ms · total ${d.ms} ms`:`IA terminou com ${Object.values(d.fields||{}).filter(Boolean).length}/11 campos.`;
       }
       if(event==='erro') throw Object.assign(new Error(d.error||'Falha da NVIDIA.'),{code:d.code});
@@ -495,8 +528,9 @@ async function generateCompleteKit(){
     kitStatus.textContent='2/3 · Jev escolhendo o Writer e produzindo copy…';
     if(writerReady)await generateCopy();
     kitStatus.textContent='3/3 · salvando o escopo do kit no projeto…';
-    const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({briefing:briefing.value,modelRouting,v2:{kitStatus:'ready',materials}})});
-    activeProject=d.project;
+    projectV2={...projectV2,kitStatus:'ready',materials};
+    const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({briefing:briefing.value,modelRouting,v2:projectV2})});
+    activeProject=d.project;projectV2=d.project.v2||projectV2;
     await saveVersion();
     kitStatus.textContent=`✓ Base do kit criada: ${materials.join(', ')}. Marca/site/carrosséis/e-mail/ads estão renderizados; módulos V2 adicionais usam este mesmo estado.`;
     status.textContent='Kit base V2 pronto e versionado.';
