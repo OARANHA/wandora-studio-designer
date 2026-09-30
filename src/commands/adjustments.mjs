@@ -119,7 +119,18 @@ export function lerCores(frase){
   }
   const occupied=()=>found.map(x=>[x.ini,x.fim]);
   const terms=[];
-  for(const c of CORES)for(const term of [c.nome,...c.sinonimos])terms.push({term:normalize(term),c});
+  const variants=(raw)=>{
+    const term=normalize(raw), out=new Set([term]);
+    if(!term.includes(' ')&&!term.includes('-')){
+      if(term.endsWith('o')){const b=term.slice(0,-1);out.add(b+'a');out.add(term+'s');out.add(b+'as');}
+      else if(term.endsWith('a')||term.endsWith('e'))out.add(term+'s');
+      else if(term.endsWith('l'))out.add(term.slice(0,-1)+'is');
+      else if(term.endsWith('m'))out.add(term.slice(0,-1)+'ns');
+      else out.add(term+'s');
+    }
+    return [...out];
+  };
+  for(const c of CORES)for(const raw of [c.nome,...c.sinonimos])for(const term of variants(raw))terms.push({term,c});
   terms.sort((a,b)=>b.term.length-a.term.length);
   for(const {term,c} of terms){
     let pos=0;while((pos=n.indexOf(term,pos))>=0){
