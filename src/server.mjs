@@ -6,7 +6,7 @@ import { HttpError, clientIp, readBuffer, readForm, readJson, redirect, sendJson
 import { authenticate, clearCookieHeader, cookieHeader, logout, sessionFromRequest } from './auth/auth.mjs';
 import { jevDecide } from './ai/jev.mjs';
 import { nvidiaChat, nvidiaStream } from './ai/nvidia.mjs';
-import { nvidiaTranscribeWav } from './ai/nvidia-asr.mjs';
+import { transcribeWav } from './ai/speech.mjs';
 import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
@@ -219,7 +219,7 @@ const server = http.createServer(async (req, res) => {
       const controller=new AbortController();
       res.on('close',()=>controller.abort());
       const started=Date.now();
-      const result=await nvidiaTranscribeWav(audio,{signal:controller.signal});
+      const result=await transcribeWav(audio,{signal:controller.signal});
       return sendJson(res,200,{ok:true,text:result.text,provider:result.provider,language:result.language,ms:Date.now()-started});
     }
     if (path === '/api/escrever' && req.method === 'POST') {
