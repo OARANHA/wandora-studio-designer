@@ -18,14 +18,18 @@ export function redirect(res, location, status = 303) {
   res.end();
 }
 
-export async function readBody(req, max = 100_000) {
+export async function readBuffer(req, max = 100_000) {
   let size = 0; const chunks = [];
   for await (const chunk of req) {
     size += chunk.length;
     if (size > max) throw new HttpError(413, 'Conteúdo grande demais.', 'payload_too_large');
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
+}
+
+export async function readBody(req, max = 100_000) {
+  return (await readBuffer(req, max)).toString('utf8');
 }
 
 export async function readJson(req, max = 100_000) {
