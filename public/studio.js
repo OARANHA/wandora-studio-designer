@@ -489,11 +489,27 @@ function setupMic(){
   recognition.continuous=true;
   recognition.interimResults=true;
   recognition.maxAlternatives=1;
+  let resultSeen=false, speechSeen=false, speechTimer=null;
+  const clearSpeechTimer=()=>{if(speechTimer){clearTimeout(speechTimer);speechTimer=null;}};
   recognition.onstart=()=>{
+    resultSeen=false; speechSeen=false; clearSpeechTimer();
     setMicState(true,'🎙️ Ouvindo em português. Fale normalmente — o Studio atualiza durante a frase.');
     paintTranscript();
+    setTimeout(()=>{if(micWanted)void startVoiceMeter();},180);
+  };
+  recognition.onaudiostart=()=>{
+    if(micWanted)status.textContent='🎙️ Microfone ativo · aguardando sua fala…';
+  };
+  recognition.onspeechstart=()=>{
+    speechSeen=true;
+    if(micWanted)status.textContent='🎙️ Fala detectada · transcrevendo ao vivo…';
+    clearSpeechTimer();
+    speechTimer=setTimeout(()=>{
+      if(micWanted&&!resultSeen)status.textContent='⚠️ Som detectado, mas o navegador ainda não entregou a transcrição. Continue falando ou toque MIC para reiniciar.';
+    },4500);
   };
   recognition.onresult=(event)=>{
+    resultSeen=true; clearSpeechTimer();
     let interim='';
     for(let i=event.resultIndex;i<event.results.length;i++){
       const text=(event.results[i][0]?.transcript||'').trim();
@@ -507,17 +523,31 @@ function setupMic(){
     paintTranscript();
     decisionScheduler.schedule();
   };
+  recognition.onnomatch=()=>{
+    status.textContent='⚠️ Ouvi áudio, mas não consegui reconhecer palavras. Fale um pouco mais perto do microfone.';
+  };
   recognition.onerror=(event)=>{
-    const friendly={not_allowed:'Permissão do microfone negada.',audio_capture:'Microfone não encontrado.',network:'Falha de rede no reconhecimento de voz.',no_speech:'Nenhuma fala detectada.'}[event.error]||`Microfone: ${event.error||'erro'}.`;
-    if(event.error==='not-allowed'||event.error==='audio-capture'){
-      micWanted=false; voiceMeter?.stop?.(); voiceMeter=null; closeTranscript();
-    }
-    status.textContent=friendly;
+    clearSpeechTimer();
+    const code=String(event.error||'erro');
+    if(code==='no-speech'||code==='aborted')return;
+    const friendly={
+      'not-allowed':'O navegador bloqueou o microfone. Libere o acesso no cadeado da barra de endereço.',
+      'service-not-allowed':'O reconhecimento de voz não está liberado neste navegador. Use Chrome, Edge ou Safari.',
+      'audio-capture':'Nenhum microfone encontrado.',
+      'network':'O áudio chegou, mas o serviço de reconhecimento de voz do navegador falhou na rede. Toque MIC para tentar novamente.',
+      'language-not-supported':'O reconhecimento de voz em português não está disponível neste navegador.'
+    }[code]||`O reconhecimento de voz parou (${code}). Toque MIC para tentar novamente.`;
+    micWanted=false;
+    voiceMeter?.stop?.(); voiceMeter=null;
+    setMicState(false);
+    closeTranscript();
+    status.textContent='⚠️ '+friendly;
   };
   recognition.onend=()=>{
+    clearSpeechTimer();
     setMicState(false);
     if(micWanted&&document.visibilityState==='visible'){
-      setTimeout(()=>{try{recognition.start();}catch{}},120);
+      setTimeout(()=>{try{recognition.start();}catch{micWanted=false;status.textContent='⚠️ Não foi possível reiniciar o reconhecimento de voz.';}},180);
       return;
     }
     voiceMeter?.stop?.(); voiceMeter=null; closeTranscript();
@@ -528,8 +558,12 @@ function setupMic(){
     if(micWanted||micListening){stopMic();return;}
     micWanted=true;
     micBaseText=briefing.value.trim(); micFinalText=''; micInterimText='';
-    paintTranscript(); void startVoiceMeter();
-    try{recognition.start();}catch{status.textContent='O microfone já está iniciando.';}
+    paintTranscript();
+    try{recognition.start();}
+    catch{
+      micWanted=false; closeTranscript();
+      status.textContent='⚠️ Não foi possível ligar o reconhecimento de voz neste navegador.';
+    }
   });
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden&&micWanted)stopMic('Microfone desligado enquanto a aba estava em segundo plano.');
