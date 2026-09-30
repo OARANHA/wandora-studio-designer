@@ -5,7 +5,8 @@ import { config, assertProductionConfig } from './config.mjs';
 import { HttpError, clientIp, readForm, readJson, redirect, sendJson, serveStatic } from './lib/http.mjs';
 import { authenticate, clearCookieHeader, cookieHeader, logout, sessionFromRequest } from './auth/auth.mjs';
 import { jevDecide } from './ai/jev.mjs';
-import { nvidiaChat } from './ai/nvidia.mjs';
+import { nvidiaChat, nvidiaStream } from './ai/nvidia.mjs';
+import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
 
@@ -103,6 +104,41 @@ const server = http.createServer(async (req, res) => {
       });
       const settled=await Promise.all(jobs);
       if(!controller.signal.aborted){ event('done',{seq,ok:settled.every(x=>x.ok),groups:settled,ms:Date.now()-started}); res.end(); }
+      return;
+    }
+    if (path === '/api/escrever' && req.method === 'POST') {
+      const body=await readJson(req,500_000);
+      const text=String(body.texto||'').replace(/\s+/g,' ').trim();
+      if(text.split(/\s+/).length<2) throw new HttpError(400,'Descreva o negócio com pelo menos algumas palavras.','text_too_short');
+      if(!body.decisoes || typeof body.decisoes!=='object') throw new HttpError(400,'decisoes é obrigatório.','decisions_required');
+
+      const controller=new AbortController();
+      res.on('close',()=>controller.abort());
+      res.writeHead(200,{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-store, no-transform','connection':'keep-alive','x-accel-buffering':'no'});
+      const event=(name,data)=>{ if(!res.destroyed) res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`); };
+      event('inicio',{provider:'nvidia',model:config.nvidia.model,campos:11});
+      event('fila',{provider:'nvidia',waiting:0});
+      let fields={};
+      try{
+        const messages=buildWriterMessages({texto:text,decisoes:body.decisoes});
+        const result=await nvidiaStream({
+          messages,
+          max_tokens:WRITER_MAX_TOKENS,
+          temperature:0.7,
+          top_p:0.9,
+          signal:controller.signal,
+          onToken:async(delta,meta)=>{
+            fields=parseWriterFields(meta.text);
+            event('tok',{delta,fields,chars:meta.text.length,chunks:meta.chunks});
+          },
+        });
+        fields=parseWriterFields(result.text);
+        event('fim',{ok:true,fields,complete:writerComplete(fields),model:result.model,ms:result.ms,first_token_ms:result.first_token_ms,chunks:result.chunks});
+      }catch(e){
+        if(!controller.signal.aborted) event('erro',{ok:false,error:e?.message||'Falha ao escrever.',code:e?.code||'writer_error'});
+      }finally{
+        if(!res.destroyed) res.end();
+      }
       return;
     }
     if (path === '/api/text/generate' && req.method === 'POST') {
