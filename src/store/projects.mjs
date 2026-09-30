@@ -36,7 +36,15 @@ function cleanModelRouting(value = {}) {
 function cleanV2(value = {}) {
   const materials=Array.isArray(value?.materials)?value.materials.map(v=>cleanText(v,40)).filter(Boolean).slice(0,20):[];
   const kitStatus=['draft','planning','generating','ready'].includes(value?.kitStatus)?value.kitStatus:'draft';
-  return {kitStatus,materials};
+  const raw=value?.siteStructure&&typeof value.siteStructure==='object'?value.siteStructure:{};
+  const heroRaw=raw.hero&&typeof raw.hero==='object'?raw.hero:{};
+  const variants=new Set(['split','centered','mascot_right','dashboard_right','editorial']);
+  const allowedSections=new Set(['benefits','proof','features','process','gallery','pricing','faq','lead','cta','footer']);
+  const siteStructure={
+    hero:{enabled:heroRaw.enabled!==false,variant:variants.has(heroRaw.variant)?heroRaw.variant:'split'},
+    sections:Array.isArray(raw.sections)?raw.sections.map(x=>cleanText(typeof x==='string'?x:x?.id,40)).filter(x=>allowedSections.has(x)).filter((x,i,a)=>a.indexOf(x)===i).slice(0,12):[],
+  };
+  return {kitStatus,materials,siteStructure};
 }
 async function readJsonFile(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
@@ -75,7 +83,7 @@ export async function createProject({ owner, name, clientName = '', briefing = '
     const now = new Date().toISOString();
     const project = {
       id: randomUUID(), owner, name: projectName, clientName: cleanText(clientName, 120),
-      briefing: String(briefing ?? '').trim().slice(0, 5000), modelRouting:{mode:'auto',selections:{}}, v2:{kitStatus:'draft',materials:[]}, createdAt: now, updatedAt: now, versionCount: 0,
+      briefing: String(briefing ?? '').trim().slice(0, 5000), modelRouting:{mode:'auto',selections:{}}, v2:{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}}, createdAt: now, updatedAt: now, versionCount: 0,
     };
     doc.projects.push(project);
     await atomicJson(INDEX, doc);
@@ -108,7 +116,7 @@ export async function updateProject(owner, id, patch = {}) {
     if ('modelRouting' in patch) next.modelRouting = cleanModelRouting(patch.modelRouting);
     if ('v2' in patch) next.v2 = cleanV2(patch.v2);
     if (!next.modelRouting) next.modelRouting={mode:'auto',selections:{}};
-    if (!next.v2) next.v2={kitStatus:'draft',materials:[]};
+    if (!next.v2) next.v2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}};
     next.updatedAt = new Date().toISOString();
     doc.projects[i] = next;
     await atomicJson(INDEX, doc);
