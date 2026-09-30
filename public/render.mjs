@@ -120,19 +120,33 @@ export function renderBrand(decisions,copy={}){
   const meta=node('div','brand-meta'); meta.append(node('span','',`logo · ${labelKey(choice(d.estilo)||'clássico')}`),node('span','',`fonte · ${labelKey(choice(d.fonte)||'editorial')}`));
   card.append(top,swatches,meta); root.append(card);
 }
-export function renderSite(decisions,copy={}){
+export function renderSite(decisions,copy={},v2={}){
   const root=document.getElementById('site-preview'); if(!root)return;
   const d=decisions?.site; if(!d){empty(root,'LANDING PAGE','O site nasce aqui');return;}
   const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
   const shell=node('div',`site-art site-art--${choice(d.hero)||'split'}`);
   const nav=node('div','site-nav'); nav.append(node('b','',textCopy(copy,'brand.name','MARCA')),node('span','', 'SERVIÇOS  ·  SOBRE  ·  CONTATO'));
-  const hero=node('div','site-hero-art'); const copyBox=node('div','site-copy');
-  const title=textCopy(copy,'site.headline',TITLE[choice(d.titulo)]||'Uma marca feita para ser lembrada.');
-  copyBox.append(node('small','',labelKey(choice(decisions?.entender?.seg)||'negócio')),node('h2','',title),node('p','',textCopy(copy,'site.subheadline','Estratégia, personalidade e uma experiência visual coerente do primeiro contato à conversão.')));
-  const button=node('button','site-cta',textCopy(copy,'site.cta',CTA[choice(d.cta)]||'Conhecer agora')); button.type='button';
-  copyBox.append(button);
-  const art=node('div',`site-object site-object--${choice(d.img)||'flat'}`); art.append(node('i'),node('i'),node('i'));
-  hero.append(copyBox,art); shell.append(nav,hero); root.append(shell);
+  const structure=v2?.siteStructure||{hero:{enabled:true,variant:'split'},sections:[]};
+  const heroVariant=structure.hero?.variant||choice(d.hero)||'split';
+  shell.classList.add(`site-v2--${String(heroVariant).replaceAll('_','-')}`);
+  if(structure.hero?.enabled!==false){
+    const hero=node('div','site-hero-art'); const copyBox=node('div','site-copy');
+    const title=textCopy(copy,'site.headline',TITLE[choice(d.titulo)]||'Uma marca feita para ser lembrada.');
+    copyBox.append(node('small','',labelKey(choice(decisions?.entender?.seg)||'negócio')),node('h2','',title),node('p','',textCopy(copy,'site.subheadline','Estratégia, personalidade e uma experiência visual coerente do primeiro contato à conversão.')));
+    const button=node('button','site-cta',textCopy(copy,'site.cta',CTA[choice(d.cta)]||'Conhecer agora')); button.type='button';
+    copyBox.append(button);
+    const art=node('div',`site-object site-object--${choice(d.img)||'flat'}`); art.append(node('i'),node('i'),node('i'));
+    if(heroVariant==='mascot_right')art.classList.add('site-object--mascot');
+    if(heroVariant==='dashboard_right')art.classList.add('site-object--dashboard');
+    hero.append(copyBox,art); shell.append(nav,hero);
+  }else shell.append(nav);
+  const sectionLabels={benefits:'Benefícios',proof:'Prova social',features:'Serviços / recursos',process:'Como funciona',gallery:'Galeria',pricing:'Planos / preços',faq:'Perguntas frequentes',lead:'Fale com a gente',cta:'Pronto para começar?',footer:'Rodapé'};
+  for(const id of structure.sections||[]){
+    const sec=node('section',`site-v2-section site-v2-section--${id}`);
+    sec.append(node('small','',id.toUpperCase()),node('strong','',sectionLabels[id]||labelKey(id)),node('span','',id==='faq'?'Perguntas e respostas essenciais para reduzir objeções.':id==='proof'?'Avaliações, números ou clientes que reforçam confiança.':'Bloco estrutural criado pelo comando de voz.'));
+    shell.append(sec);
+  }
+  root.append(shell);
 }
 export function renderPosts(decisions,copy={}){
   const root=document.getElementById('posts-preview'); if(!root)return;
@@ -166,6 +180,6 @@ export function renderAds(decisions,copy={}){
   ad.append(node('small','',labelKey(choice(d.ad_conceito)||'campanha')),node('strong','',textCopy(copy,'ads.headline',labelKey(choice(d.ad_titulo)||'Uma oferta para você'))),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(decisions?.marca?.slogan)]||'Marca, produto e chamada em sintonia.')));
   const b=node('button','ad-cta',textCopy(copy,'ads.cta',CTA[choice(d.ad_cta)]||'Saiba mais'));b.type='button';ad.append(b);root.append(ad);
 }
-export function renderAll(decisions={},copy={}){
-  renderBrand(decisions,copy); renderSite(decisions,copy); renderPosts(decisions,copy); renderEmail(decisions,copy); renderAds(decisions,copy);
+export function renderAll(decisions={},copy={},v2={}){
+  renderBrand(decisions,copy); renderSite(decisions,copy,v2); renderPosts(decisions,copy); renderEmail(decisions,copy); renderAds(decisions,copy);
 }
