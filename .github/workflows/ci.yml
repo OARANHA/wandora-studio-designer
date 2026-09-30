@@ -36,6 +36,7 @@ jobs:
           node --check public/render.mjs
           node --check public/variation.mjs
           node --check public/export.mjs
+          node --check public/live.mjs
 
       - name: Run tests
         run: npm test
