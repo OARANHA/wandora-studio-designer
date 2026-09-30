@@ -580,7 +580,7 @@ function selectV2Tab(tab){
 }
 
 function exportContext(){
-  return {project:activeProject,decisions:latestDecisions,copy:latestCopy,locks:{choices:lockedChoices,targets:lockedTargets},history:commandHistory};
+  return {project:activeProject,decisions:latestDecisions,copy:latestCopy,locks:{choices:lockedChoices,targets:lockedTargets},history:commandHistory,v2:projectV2,modelRouting};
 }
 function exportBase(){
   return slugify(activeProject?.name || activeProject?.clientName || latestCopy?.brand?.name || 'wandora-studio');
