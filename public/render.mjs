@@ -105,7 +105,7 @@ function empty(root,label,sub){
   root.replaceChildren(); const box=node('div','piece-empty'); box.append(node('b','',label),node('span','',sub)); root.append(box);
 }
 export function resetPieces(){
-  const defs=[['site-preview','LANDING PAGE','O site nasce aqui'],['posts-preview','CARROSSÉIS','3 histórias em 18 lâminas'],['brand-preview','MARCA','Logo, paleta e fontes'],['email-preview','E-MAIL','Template + assinatura'],['ads-preview','300×250','6 formatos de display']];
+  const defs=[['site-preview','LANDING PAGE','O site nasce aqui'],['posts-preview','CARROSSÉIS','3 histórias em 18 lâminas'],['brand-preview','MARCA','Logo, paleta e fontes'],['email-preview','E-MAIL','Template + assinatura'],['ads-preview','300×250','6 formatos de display'],['stories-preview','9:16','Stories derivados da campanha'],['manual-preview','BRAND BOOK','Logo, cores, tipo e aplicações']];
   for(const [id,a,b] of defs){const root=document.getElementById(id); if(root)empty(root,a,b);}
 }
 export function renderBrand(decisions,copy={}){
@@ -172,6 +172,40 @@ export function renderEmail(decisions,copy={}){
   const sig=node('div','email-signature'); sig.append(node('i','', (textCopy(copy,'brand.name','W')).slice(0,1)),node('span','',textCopy(copy,'email.signature','Equipe · relacionamento e atendimento')));
   mail.append(bar,body,sig); root.append(mail);
 }
+export function renderStories(decisions,copy={}){
+  const root=document.getElementById('stories-preview'); if(!root)return;
+  const d=decisions?.posts; if(!d){empty(root,'9:16','Stories derivados da campanha');return;}
+  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
+  const titles=[
+    textCopy(copy,'posts.presentation.title','Conheça a marca'),
+    textCopy(copy,'posts.sales.title','Oferta em destaque'),
+    textCopy(copy,'posts.relationship.title','Fale com a gente'),
+  ];
+  const labels=['APRESENTAÇÃO','VENDA','RELACIONAMENTO'];
+  titles.forEach((title,i)=>{
+    const card=node('article',`story-card story-card--${i+1}`);
+    const top=node('div','story-top'); top.append(node('small','',`0${i+1} · ${labels[i]}`),node('i','',i===1?'▶':'W'));
+    const body=node('div','story-body'); body.append(node('strong','',title),node('span','',i===0?'Toque para conhecer':i===1?'Arraste para saber mais':'Responda este story'));
+    const foot=node('div','story-foot','ENVIAR MENSAGEM');
+    card.append(top,body,foot); root.append(card);
+  });
+}
+export function renderManual(decisions,copy={},v2={}){
+  const root=document.getElementById('manual-preview'); if(!root)return;
+  const d=decisions?.marca; if(!d){empty(root,'BRAND BOOK','Logo, cores, tipo e aplicações');return;}
+  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
+  const shell=node('div','manual-art');
+  const cover=node('div','manual-cover');
+  cover.append(node('small','','MANUAL DE MARCA'),node('strong','',textCopy(copy,'brand.name','NOVA MARCA')),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(d.slogan)]||'Identidade que trabalha como sistema.')));
+  const guide=node('div','manual-guide');
+  const swatches=node('div','manual-swatches');colors.forEach(c=>{const i=node('i');i.style.background=c;i.title=c;swatches.append(i);});
+  const rules=node('ul','manual-rules');
+  ['Logo e variações',`Cores · ${choice(d.paleta)||'paleta'}`,`Tipografia · ${labelKey(choice(d.fonte)||'editorial')}`,'Tom de voz e aplicações','Mascote e elementos visuais'].forEach(x=>rules.append(node('li','',x)));
+  const structure=v2?.siteStructure;
+  if(structure?.hero?.enabled)rules.append(node('li','',`Aplicação digital · hero ${labelKey(structure.hero.variant)}`));
+  guide.append(swatches,rules);shell.append(cover,guide);root.append(shell);
+}
+
 export function renderAds(decisions,copy={}){
   const root=document.getElementById('ads-preview'); if(!root)return;
   const d=decisions?.anuncios; if(!d){empty(root,'300×250','6 formatos de display');return;}
@@ -181,5 +215,5 @@ export function renderAds(decisions,copy={}){
   const b=node('button','ad-cta',textCopy(copy,'ads.cta',CTA[choice(d.ad_cta)]||'Saiba mais'));b.type='button';ad.append(b);root.append(ad);
 }
 export function renderAll(decisions={},copy={},v2={}){
-  renderBrand(decisions,copy); renderSite(decisions,copy,v2); renderPosts(decisions,copy); renderEmail(decisions,copy); renderAds(decisions,copy);
+  renderBrand(decisions,copy); renderSite(decisions,copy,v2); renderPosts(decisions,copy); renderStories(decisions,copy); renderEmail(decisions,copy); renderAds(decisions,copy); renderManual(decisions,copy,v2);
 }
