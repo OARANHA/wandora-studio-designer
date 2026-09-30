@@ -5,8 +5,9 @@ const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), provider
 const projectSelect=$('#project-select'), projectName=$('#project-name'), clientName=$('#client-name');
 const createProjectBtn=$('#create-project'), saveVersionBtn=$('#save-version'), openVersionsBtn=$('#open-versions'), generateCopyBtn=$('#generate-copy');
 const anotherVersionBtn=$('#another-version'), xrayBtn=$('#xray'), backJevBtn=$('#back-jev');
+const commandInput=$('#command'), applyCommandBtn=$('#apply-command'), lockStrip=$('#lock-strip');
 const versionsDialog=$('#versions-dialog'), versionsList=$('#versions-list'), xrayDialog=$('#xray-dialog'), xrayList=$('#xray-list'), xraySummary=$('#xray-summary');
-let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, copyGenerating=false, latestVariation=[], questionInfo=null;
+let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
 const labels={seg:'Segmento',pers:'Personalidade',pub:'Público',obj:'Objetivo',canal:'Canal',preco:'Preço',mat:'Maturidade',dif:'Diferencial',oferta:'Oferta',emoji:'Emojis'};
 const channel={entender:$('#ch-entender'),site:$('#ch-site'),marca:$('#ch-marca'),posts:$('#ch-posts'),email:$('#ch-email'),anuncios:$('#ch-anuncios')};
 const signal={site:$('#signal-site'),marca:$('#brand-signal'),posts:$('#signal-posts'),email:$('#signal-email'),anuncios:$('#signal-anuncios')};
@@ -55,6 +56,7 @@ function refreshProjectButtons(){
   generateCopyBtn.disabled=!latestComplete || !nvidiaReady || copyGenerating;
   anotherVersionBtn.disabled=!latestComplete;
   xrayBtn.disabled=!latestComplete;
+  applyCommandBtn.disabled=!latestComplete || commandBusy;
   backJevBtn.hidden=!latestVariation.length;
 }
 async function json(url,opts={}){
@@ -102,7 +104,7 @@ async function saveVersion(){
   saveVersionBtn.disabled=true; status.textContent='Salvando versão…';
   try{
     await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({briefing:briefing.value})});
-    const d=await json(`/api/projects/${activeProject.id}/versions`,{method:'POST',body:JSON.stringify({briefing:briefing.value,decisions:latestDecisions,copy:latestCopy,reason:'manual',metadata:{decisionCount:Object.values(latestDecisions).reduce((n,g)=>n+Object.keys(g||{}).length,0),variationChanges:latestVariation}})});
+    const d=await json(`/api/projects/${activeProject.id}/versions`,{method:'POST',body:JSON.stringify({briefing:briefing.value,decisions:latestDecisions,copy:latestCopy,reason:'manual',metadata:{decisionCount:Object.values(latestDecisions).reduce((n,g)=>n+Object.keys(g||{}).length,0),variationChanges:latestVariation,lockedChoices,lockedTargets}})});
     activeProject={...activeProject,versionCount:d.version.number,briefing:briefing.value}; await loadProjects(activeProject.id);
     status.textContent=`Versão ${d.version.number} salva.`;
   }catch(e){status.textContent=e.message;}finally{refreshProjectButtons();}
@@ -126,7 +128,7 @@ async function restoreVersion(id){
   if(!activeProject)return;
   try{
     const d=await json(`/api/projects/${activeProject.id}/versions/${id}`), v=d.version;
-    briefing.value=v.briefing||''; latestDecisions=v.decisions||{}; latestCopy=v.copy||{}; latestVariation=Array.isArray(v.metadata?.variationChanges)?v.metadata.variationChanges:[];
+    briefing.value=v.briefing||''; latestDecisions=v.decisions||{}; latestCopy=v.copy||{}; latestVariation=Array.isArray(v.metadata?.variationChanges)?v.metadata.variationChanges:[]; lockedChoices=v.metadata?.lockedChoices&&typeof v.metadata.lockedChoices==='object'?v.metadata.lockedChoices:{}; lockedTargets=v.metadata?.lockedTargets&&typeof v.metadata.lockedTargets==='object'?v.metadata.lockedTargets:{}; renderLocks();
     let total=0; for(const [group,answers] of Object.entries(latestDecisions)){total+=Object.keys(answers||{}).length;setChannel(group,'done');renderGroupSummary(group,answers);}
     latestComplete=total===89; $('#decisoes').textContent=String(total); $('#latencia').textContent='salva'; refreshProjectButtons(); versionsDialog.close();
     status.textContent=`Versão ${v.number} restaurada${latestComplete?' com 89 decisões':''}.`;
@@ -208,6 +210,136 @@ async function openXray(){
   }catch(e){status.textContent=e.message;}
 }
 
+function snapshotStudio(reason='manual',target=null){
+  commandHistory.push({
+    reason,target,
+    decisions:structuredClone(latestDecisions),
+    copy:structuredClone(latestCopy),
+    lockedChoices:structuredClone(lockedChoices),
+    lockedTargets:structuredClone(lockedTargets),
+    variation:structuredClone(latestVariation),
+  });
+  if(commandHistory.length>40)commandHistory.shift();
+}
+function applyLocksToGroup(group,answers){
+  const out=structuredClone(answers||{});
+  for(const [id,value] of Object.entries(lockedChoices)){
+    if(out[id]?.type==='choice')out[id].choice=value;
+  }
+  return out;
+}
+function renderLocks(){
+  lockStrip.replaceChildren();
+  const entries=Object.entries(lockedTargets);
+  lockStrip.hidden=!entries.length;
+  for(const [target,data] of entries){
+    const b=document.createElement('button');b.type='button';b.className='lock-tape';
+    b.textContent=`🔒 ${target} ×`;b.title=data?.reason||'Peça travada';
+    b.addEventListener('click',async()=>{
+      const info=await loadQuestionInfo();for(const id of info.targets?.[target]||[])delete lockedChoices[id];
+      delete lockedTargets[target];renderLocks();status.textContent=`${prettyId(target)} destravado.`;
+    });
+    lockStrip.append(b);
+  }
+}
+async function lockTarget(target,reason='seu comando'){
+  const info=await loadQuestionInfo(), ids=info.targets?.[target]||[];
+  for(const id of ids){
+    for(const answers of Object.values(latestDecisions)){
+      const a=answers?.[id];if(a?.type==='choice'&&a.choice)lockedChoices[id]=a.choice;
+    }
+  }
+  if(ids.length)lockedTargets[target]={reason,t:Date.now()};
+  renderLocks();
+}
+function targetChanged(a,b,ids=[]){
+  for(const id of ids){
+    let av,bv;
+    for(const g of Object.values(a||{}))if(g?.[id])av=g[id].choice;
+    for(const g of Object.values(b||{}))if(g?.[id])bv=g[id].choice;
+    if(av!==bv)return true;
+  }
+  return false;
+}
+async function undoTarget(target){
+  const info=await loadQuestionInfo(), ids=info.targets?.[target]||[];
+  if(!ids.length){status.textContent='Não encontrei uma peça específica para desfazer.';return false;}
+  for(let i=commandHistory.length-1;i>=0;i--){
+    const snap=commandHistory[i];
+    if(!targetChanged(latestDecisions,snap.decisions,ids)&&JSON.stringify(lockedTargets[target]||null)===JSON.stringify(snap.lockedTargets?.[target]||null))continue;
+    for(const id of ids){
+      for(const [group,answers] of Object.entries(latestDecisions)){
+        if(answers?.[id]&&snap.decisions?.[group]?.[id])latestDecisions[group][id]=structuredClone(snap.decisions[group][id]);
+      }
+      if(id in (snap.lockedChoices||{}))lockedChoices[id]=snap.lockedChoices[id];else delete lockedChoices[id];
+    }
+    if(snap.lockedTargets?.[target])lockedTargets[target]=structuredClone(snap.lockedTargets[target]);else delete lockedTargets[target];
+    latestVariation=[];renderAll(latestDecisions,latestCopy);renderLocks();refreshProjectButtons();
+    status.textContent=`${prettyId(target)} voltou para a versão anterior.`;return true;
+  }
+  status.textContent=`Não encontrei uma versão anterior diferente de ${prettyId(target)}.`;return false;
+}
+async function currentChoiceLabels(){
+  const info=await loadQuestionInfo(), out={};
+  for(const [group,answers] of Object.entries(latestDecisions)){
+    for(const [id,a] of Object.entries(answers||{})){
+      if(a?.type==='choice')out[id]=optionLabel(info.questions?.[group]?.[id],a.choice);
+    }
+  }
+  return out;
+}
+function applyLibraryAnswers(target,answers){
+  let changed=0;
+  for(const [id,a] of Object.entries(answers||{})){
+    if(a?.type!=='choice'||!a.choice||a.choice==='manter')continue;
+    for(const groupAnswers of Object.values(latestDecisions)){
+      if(groupAnswers?.[id]?.type==='choice'){
+        groupAnswers[id]={...groupAnswers[id],choice:a.choice};
+        changed+=1;break;
+      }
+    }
+  }
+  return changed;
+}
+async function applyCommand(){
+  const comando=commandInput.value.trim();
+  if(!latestComplete||comando.split(/\s+/).length<2){status.textContent='Digite o que quer mudar em algumas palavras.';return;}
+  commandBusy=true;refreshProjectButtons();status.textContent=`Entendendo “${comando}”…`;
+  try{
+    const atuais=await currentChoiceLabels();
+    const resp=await json('/api/comando',{method:'POST',body:JSON.stringify({comando,descricao:briefing.value,atuais})});
+    const confident=['comando_de_edicao','desfazer','fixar'].includes(resp.tipo)&&Number(resp.p_tipo)>=.55;
+    if(resp.tipo==='descrever_negocio'||(!confident&&resp.tipo!=='outra')){
+      commandInput.value=''; briefing.value=`${briefing.value.trim()} ${comando}`.trim();
+      status.textContent='Entendi como descrição do negócio. Refazendo as decisões…';
+      await analyze();return;
+    }
+    if(resp.tipo==='outra'){status.textContent='Não parece um pedido de mudança.';return;}
+    const target=resp.alvo;
+    if(resp.tipo==='fixar'){
+      if(!questionInfo?.targets?.[target])await loadQuestionInfo();
+      if(!questionInfo?.targets?.[target]){status.textContent='Entendi que quer fixar, mas não qual peça.';return;}
+      snapshotStudio('fixar',target);await lockTarget(target,`fixado: ${comando}`);commandInput.value='';
+      status.textContent=`🔒 ${prettyId(target)} fixado: novas descrições não mudam essa peça.`;return;
+    }
+    if(resp.tipo==='desfazer'){snapshotStudio('antes_desfazer',target);await undoTarget(target);commandInput.value='';return;}
+    if(resp.tipo==='comando_de_edicao'&&target==='tudo'){
+      commandInput.value=''; briefing.value=`${briefing.value.trim()} ${comando}`.trim();
+      status.textContent='Estilo geral: refazendo tudo com o seu pedido…';await analyze();return;
+    }
+    if(resp.tipo==='comando_de_edicao'&&resp.answers){
+      snapshotStudio('comando',target);
+      const changed=applyLibraryAnswers(target,resp.answers);
+      await lockTarget(target,`seu comando: ${comando}`);
+      latestVariation=[];renderAll(latestDecisions,latestCopy);renderLocks();commandInput.value='';refreshProjectButtons();
+      status.textContent=changed?`🎯 ${prettyId(target)} alterado e travado · ${changed} decisão(ões).`:`${prettyId(target)} → o Jev achou que já estava assim; peça travada.`;
+      return;
+    }
+    status.textContent='Entendi um pedido, mas não qual peça mudar.';
+  }catch(e){status.textContent=`Não consegui aplicar: ${e.message}`;}
+  finally{commandBusy=false;refreshProjectButtons();}
+}
+
 function copyShape(fields={}){
   const first=(v)=>String(v||'').split(/\n|[.!?](?:\s|$)/)[0].trim().slice(0,86);
   return {
@@ -274,7 +406,7 @@ async function analyze(){
     await readSse(r,(event,d)=>{
       if(controller!==activeController)return;
       if(event==='group'){
-        latestDecisions[d.group]=d.answers||{}; const n=Object.keys(d.answers||{}).length; decisions+=n; $('#decisoes').textContent=String(decisions); setChannel(d.group,'done'); renderGroupSummary(d.group,d.answers,d.ms); status.textContent=`${d.group}: ${n} decisões recebidas.`;
+        latestDecisions[d.group]=applyLocksToGroup(d.group,d.answers||{}); const n=Object.keys(d.answers||{}).length; decisions+=n; $('#decisoes').textContent=String(decisions); setChannel(d.group,'done'); renderGroupSummary(d.group,d.answers,d.ms); status.textContent=`${d.group}: ${n} decisões recebidas.`;
       } else if(event==='group_error'){
         failures+=1; setChannel(d.group,'error'); setSignal(d.group,d.code||'erro',false); status.textContent=d.error;
       } else if(event==='done'){
@@ -293,6 +425,8 @@ projectSelect.addEventListener('change',selectProject);
 saveVersionBtn.addEventListener('click',saveVersion);
 openVersionsBtn.addEventListener('click',openVersions);
 generateCopyBtn.addEventListener('click',generateCopy);
+applyCommandBtn.addEventListener('click',applyCommand);
+commandInput.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyCommand();}});
 anotherVersionBtn.addEventListener('click',anotherVersion);
 xrayBtn.addEventListener('click',openXray);
 backJevBtn.addEventListener('click',backToJev);
