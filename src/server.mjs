@@ -23,7 +23,7 @@ const PUBLIC = join(here, '..', 'public');
 
 function loginPage(error = '') {
   const msg = error === 'limite' ? 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' : error ? 'E-mail ou senha incorretos.' : '';
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css?v=20260930-v2c"></head>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css?v=20260930-login2"></head>
   <body class="login-body">
     <main class="login-shell">
       <section class="login-hero" aria-hidden="true">
@@ -71,11 +71,12 @@ function loginPage(error = '') {
         <div class="hero-desk"><div class="hero-laptop"><b>W</b></div><div class="hero-books"><i>IDEIAS</i><i>MARCAS</i><i>CAMPANHAS</i></div></div>
       </section>
       <section class="login-panel">
+        <div class="login-lang">◎&nbsp; Português (BR) &nbsp;⌄</div>
         <div class="login-window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
         <div class="login-brand-plate"><img src="/assets/wandora-logo.png" alt="Wandora"></div>
         <div class="login-product">STUDIO DESIGNER</div>
         <div class="login-accent"></div>
-        <h1>Entre no<br><strong>Studio Designer</strong></h1>
+        <h1>Entrar no<br><strong>Studio Designer</strong></h1>
         <p class="login-lead">Crie materiais de marketing incríveis com o poder da IA e da sua voz.</p>
         ${msg?`<div class="login-alert" role="alert">${msg}</div>`:''}
         <form method="post" action="/login">
