@@ -17,7 +17,69 @@ const PUBLIC = join(here, '..', 'public');
 
 function loginPage(error = '') {
   const msg = error === 'limite' ? 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' : error ? 'E-mail ou senha incorretos.' : '';
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css"></head><body class="login-body"><main class="login-wrap"><section class="login-card"><img src="/assets/wandora-logo.png" alt="Wandora" class="login-logo"><div class="eyebrow">STUDIO DESIGNER VIGIA</div><h1>Entre no Studio</h1><p class="login-lead">Seu estúdio inteligente para transformar um briefing em marca, site e materiais de campanha.</p>${msg?`<div class="login-alert" role="alert">${msg}</div>`:''}<form method="post" action="/login"><label>E-mail<input type="email" name="email" autocomplete="username" required autofocus></label><label>Senha<input type="password" name="password" autocomplete="current-password" required></label><button class="key key-primary" type="submit">ENTRAR NO STUDIO</button></form><footer>Ambiente privado · sessão protegida · HTTPS</footer></section><div class="login-console" aria-hidden="true"><i></i><i></i><i></i><div class="vu"><span></span></div></div></main></body></html>`;
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css"></head>
+  <body class="login-body">
+    <main class="login-shell">
+      <section class="login-hero" aria-hidden="true">
+        <div class="login-hero-copy"><span>IDEIAS</span><span>MARCAS</span><span>CAMPANHAS</span><b>RESULTADOS</b></div>
+        <svg class="mascot-scene" viewBox="0 0 720 720" role="presentation">
+          <defs>
+            <linearGradient id="robotBody" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffdf3"/><stop offset=".55" stop-color="#e9e5d6"/><stop offset="1" stop-color="#aaa99f"/></linearGradient>
+            <linearGradient id="robotDark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#393b39"/><stop offset=".55" stop-color="#121312"/><stop offset="1" stop-color="#050505"/></linearGradient>
+            <linearGradient id="lime3d" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f4ff54"/><stop offset=".48" stop-color="#d9ff00"/><stop offset="1" stop-color="#8faa00"/></linearGradient>
+            <radialGradient id="faceGlow" cx=".35" cy=".25"><stop stop-color="#fff"/><stop offset="1" stop-color="#eee9d9"/></radialGradient>
+            <filter id="softShadow" x="-40%" y="-40%" width="180%" height="190%"><feDropShadow dx="0" dy="24" stdDeviation="20" flood-color="#000" flood-opacity=".5"/></filter>
+            <filter id="limeGlow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#d9ff00" flood-opacity=".45"/></filter>
+          </defs>
+          <ellipse cx="344" cy="651" rx="245" ry="38" fill="#000" opacity=".35"/>
+          <g filter="url(#softShadow)">
+            <rect x="213" y="182" width="278" height="269" rx="92" fill="url(#robotDark)" stroke="#050505" stroke-width="10"/>
+            <rect x="232" y="202" width="240" height="221" rx="74" fill="url(#robotBody)" stroke="#0b0b0b" stroke-width="8"/>
+            <ellipse cx="305" cy="302" rx="18" ry="32" fill="#080808"/>
+            <ellipse cx="402" cy="302" rx="18" ry="32" fill="#080808"/>
+            <path d="M327 350 Q353 380 382 348" fill="none" stroke="#080808" stroke-width="13" stroke-linecap="round"/>
+            <ellipse cx="279" cy="360" rx="22" ry="10" fill="#d9ff00"/>
+            <ellipse cx="427" cy="360" rx="22" ry="10" fill="#d9ff00"/>
+            <rect x="180" y="254" width="45" height="111" rx="22" fill="url(#lime3d)" stroke="#090909" stroke-width="8"/>
+            <rect x="479" y="254" width="45" height="111" rx="22" fill="url(#lime3d)" stroke="#090909" stroke-width="8"/>
+            <rect x="310" y="121" width="86" height="70" rx="20" fill="url(#robotDark)" stroke="#050505" stroke-width="8"/>
+            <rect x="321" y="132" width="64" height="48" rx="12" fill="url(#lime3d)" filter="url(#limeGlow)"/>
+            <text x="353" y="168" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="42" fill="#050505">W</text>
+            <rect x="249" y="433" width="206" height="173" rx="52" fill="url(#robotBody)" stroke="#0b0b0b" stroke-width="9"/>
+            <path d="M290 465 Q353 500 418 465 L398 535 L307 535 Z" fill="url(#robotDark)" stroke="#070707" stroke-width="7"/>
+            <rect x="328" y="513" width="54" height="54" rx="12" fill="url(#lime3d)" stroke="#090909" stroke-width="7"/>
+            <text x="355" y="552" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="36" fill="#050505">W</text>
+            <path d="M451 482 C525 463 552 413 557 370 C571 355 596 359 603 379 C613 410 596 448 572 477 C603 467 621 485 615 505 C603 544 539 562 478 557 Z" fill="url(#robotBody)" stroke="#090909" stroke-width="9"/>
+            <path d="M250 485 C192 478 158 510 144 556 C132 594 153 619 187 607 C213 598 226 573 238 545" fill="url(#robotBody)" stroke="#090909" stroke-width="9"/>
+          </g>
+          <g transform="translate(465 435) scale(.48)" opacity=".93" filter="url(#softShadow)">
+            <rect x="80" y="30" width="250" height="235" rx="85" fill="url(#robotDark)" stroke="#050505" stroke-width="12"/>
+            <rect x="101" y="51" width="208" height="192" rx="66" fill="url(#faceGlow)" stroke="#090909" stroke-width="9"/>
+            <path d="M150 139 q18 22 36 0 M224 139 q18 22 36 0" fill="none" stroke="#111" stroke-width="10" stroke-linecap="round"/>
+            <path d="M175 187 Q205 215 238 184" fill="none" stroke="#111" stroke-width="11" stroke-linecap="round"/>
+            <rect x="166" y="-34" width="80" height="70" rx="19" fill="url(#lime3d)" stroke="#070707" stroke-width="9"/>
+            <text x="206" y="16" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="44" fill="#050505">W</text>
+          </g>
+        </svg>
+        <div class="hero-desk"><div class="hero-laptop"><b>W</b></div><div class="hero-books"><i>IDEIAS</i><i>MARCAS</i><i>CAMPANHAS</i></div></div>
+      </section>
+      <section class="login-panel">
+        <div class="login-window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="login-brand-plate"><img src="/assets/wandora-logo.png" alt="Wandora"></div>
+        <div class="login-product">STUDIO DESIGNER</div>
+        <div class="login-accent"></div>
+        <h1>Entre no<br><strong>Studio Designer</strong></h1>
+        <p class="login-lead">Crie materiais, identidade e campanhas com a estética Wandora.</p>
+        ${msg?`<div class="login-alert" role="alert">${msg}</div>`:''}
+        <form method="post" action="/login">
+          <label>E-mail<input type="email" name="email" autocomplete="username" placeholder="seu@e-mail.com" required autofocus></label>
+          <label>Senha<input type="password" name="password" autocomplete="current-password" placeholder="Sua senha" required></label>
+          <button class="login-submit" type="submit"><span>Entrar</span><b aria-hidden="true">→</b></button>
+        </form>
+        <footer>🔒 Acesso restrito à equipe Wandora</footer>
+      </section>
+    </main>
+  </body></html>`;
 }
 
 function requireAuth(req, res) {
