@@ -22,6 +22,22 @@ function safeJsonSize(value, maxBytes, label) {
   if (Buffer.byteLength(raw, 'utf8') > maxBytes) throw new HttpError(413, `${label} grande demais.`, 'payload_too_large');
   return raw;
 }
+function cleanModelRouting(value = {}) {
+  const mode=['auto','assistido','manual'].includes(value?.mode)?value.mode:'auto';
+  const selections={};
+  if(value?.selections&&typeof value.selections==='object'&&!Array.isArray(value.selections)){
+    for(const [task,key] of Object.entries(value.selections)){
+      if(!['briefing','copy','brand','layout','review','image','video'].includes(task))continue;
+      const v=cleanText(key,180); if(v)selections[task]=v;
+    }
+  }
+  return {mode,selections};
+}
+function cleanV2(value = {}) {
+  const materials=Array.isArray(value?.materials)?value.materials.map(v=>cleanText(v,40)).filter(Boolean).slice(0,20):[];
+  const kitStatus=['draft','planning','generating','ready'].includes(value?.kitStatus)?value.kitStatus:'draft';
+  return {kitStatus,materials};
+}
 async function readJsonFile(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
   catch (e) { if (e?.code === 'ENOENT') return structuredClone(fallback); throw e; }
@@ -59,7 +75,7 @@ export async function createProject({ owner, name, clientName = '', briefing = '
     const now = new Date().toISOString();
     const project = {
       id: randomUUID(), owner, name: projectName, clientName: cleanText(clientName, 120),
-      briefing: String(briefing ?? '').trim().slice(0, 5000), createdAt: now, updatedAt: now, versionCount: 0,
+      briefing: String(briefing ?? '').trim().slice(0, 5000), modelRouting:{mode:'auto',selections:{}}, v2:{kitStatus:'draft',materials:[]}, createdAt: now, updatedAt: now, versionCount: 0,
     };
     doc.projects.push(project);
     await atomicJson(INDEX, doc);
@@ -89,6 +105,10 @@ export async function updateProject(owner, id, patch = {}) {
     }
     if ('clientName' in patch) next.clientName = cleanText(patch.clientName, 120);
     if ('briefing' in patch) next.briefing = String(patch.briefing ?? '').trim().slice(0, 5000);
+    if ('modelRouting' in patch) next.modelRouting = cleanModelRouting(patch.modelRouting);
+    if ('v2' in patch) next.v2 = cleanV2(patch.v2);
+    if (!next.modelRouting) next.modelRouting={mode:'auto',selections:{}};
+    if (!next.v2) next.v2={kitStatus:'draft',materials:[]};
     next.updatedAt = new Date().toISOString();
     doc.projects[i] = next;
     await atomicJson(INDEX, doc);
