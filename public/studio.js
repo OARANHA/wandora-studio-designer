@@ -79,7 +79,7 @@ async function loadConfig(){
   try{
     const c=await json('/api/config');
     nvidiaReady=!!c.providers.nvidia.configured;
-    providers.textContent=`JEV ${c.providers.jev.configured?'●':'○'} · NVIDIA ${nvidiaReady?'●':'○'} · ${c.total} decisões`;
+    providers.textContent=`JEV ${c.providers.jev.configured?'●':'○'} · NVIDIA ${nvidiaReady?'●':'○'} · VOZ ${c.providers.speech?.configured?'●':'○'} · ${c.total} decisões`;
     providers.classList.toggle('ready',c.providers.jev.configured&&nvidiaReady);
     generateCopyBtn.title=nvidiaReady?`NVIDIA · ${c.providers.nvidia.model}`:'Configure NVIDIA_API_KEY no servidor';
     refreshProjectButtons();
@@ -498,7 +498,7 @@ async function transcribeVoiceSegment(wav,{durationMs=0,forced=false,session}={}
     const spoken=micFinalText.trim();
     briefing.value=[micBaseText,spoken].filter(Boolean).join(micBaseText&&spoken?'\n':'').slice(0,3000);
     paintTranscript();
-    voiceStage('text','ok',`NVIDIA ASR · ${d.ms||0} ms`);
+    voiceStage('text','ok',`Whisper local · ${d.ms||0} ms`);
     status.textContent=`✓ Texto recebido em ${d.ms||0} ms · atualizando direção de arte…`;
     decisionScheduler.schedule({immediate:true});
   }catch(e){
@@ -538,7 +538,7 @@ function setupMic(){
     resetVoiceStages();
     voiceStage('audio','active','Abrindo microfone');
     paintTranscript();
-    setMicState(true,'🎙️ Abrindo voz ao vivo · transcrição NVIDIA…');
+    setMicState(true,'🎙️ Abrindo voz ao vivo · transcrição local…');
     try{
       voiceCapture=await createBackendVoiceCapture(vuEl,{
         onAudio:()=>{
@@ -562,7 +562,7 @@ function setupMic(){
         minSegmentMs:320,
       });
       if(session!==voiceSession){await voiceCapture?.stop?.({flush:false});voiceCapture=null;return;}
-      setMicState(true,'🎙️ Ouvindo ao vivo · NVIDIA transcreve e o Jev redesenha.');
+      setMicState(true,'🎙️ Ouvindo ao vivo · Whisper local transcreve e o Jev redesenha.');
     }catch(e){
       if(session!==voiceSession)return;
       micWanted=false;voiceCapture=null;
