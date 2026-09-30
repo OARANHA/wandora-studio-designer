@@ -24,7 +24,7 @@ function answer(group,id,decisions){
   if(q.type==='score'){
     const n=Number(a.score);
     if(!Number.isFinite(n)) return '';
-    const idx=Math.max(0,Math.min((q.criteria?.length||1)-1,Math.round(n*((q.criteria?.length||1)-1))));
+    const idx=Math.max(0,Math.min((q.criteria?.length||1)-1,Math.round(n)));
     return q.criteria?.[idx] || String(n);
   }
   return '';
