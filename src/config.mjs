@@ -26,6 +26,15 @@ export const config = Object.freeze({
     model: process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b',
     timeoutMs: int('NVIDIA_TIMEOUT_MS', 120_000, 5_000, 180_000),
   },
+  chutes: {
+    baseUrl: (process.env.CHUTES_BASE_URL || 'https://llm.chutes.ai/v1').replace(/\/$/, ''),
+    apiKey: process.env.CHUTES_API_KEY || '',
+    timeoutMs: int('CHUTES_TIMEOUT_MS', 60_000, 5_000, 180_000),
+    imageUrl: (process.env.CHUTES_IMAGE_URL || '').trim(),
+    imageModel: (process.env.CHUTES_IMAGE_MODEL || '').trim(),
+    videoUrl: (process.env.CHUTES_VIDEO_URL || '').trim(),
+    videoModel: (process.env.CHUTES_VIDEO_MODEL || '').trim(),
+  },
   speech: {
     baseUrl: (process.env.STT_BASE_URL || 'http://studio-asr:8000').replace(/\/$/, ''),
     model: process.env.STT_MODEL || 'Systran/faster-whisper-base',
