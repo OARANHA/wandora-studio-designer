@@ -7,6 +7,8 @@ import { authenticate, clearCookieHeader, cookieHeader, logout, sessionFromReque
 import { jevDecide } from './ai/jev.mjs';
 import { nvidiaChat, nvidiaStream } from './ai/nvidia.mjs';
 import { transcribeWav } from './ai/speech.mjs';
+import { listModels, modelTasks, routeModel } from './ai/model-registry.mjs';
+import { chutesChat, chutesStream } from './ai/chutes.mjs';
 import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
@@ -121,7 +123,22 @@ const server = http.createServer(async (req, res) => {
       const questions=Object.fromEntries(Object.entries(QUESTION_GROUPS).map(([group,items])=>[group,Object.fromEntries(Object.entries(items).map(([id,q])=>[id,{label:QUESTION_META[id]?.label||id,type:q.type,instructions:q.instructions||'',options:q.type==='choice'?q.criteria:q.type==='score'?q.criteria:null}]))]));
       return sendJson(res,200,{ok:true,groups:GROUP_META,questions,targets:TARGETS,total:QUESTION_TOTAL});
     }
-    if (path === '/api/config') return sendJson(res,200,{ok:true,domain:config.publicUrl,providers:{jev:{configured:!!config.jev.apiKey,base_url:config.jev.baseUrl,model:config.jev.model||null},nvidia:{configured:!!config.nvidia.apiKey,base_url:config.nvidia.baseUrl,model:config.nvidia.model},speech:{configured:true,base_url:config.speech.baseUrl,model:config.speech.model,language:config.speech.language}},groups:Object.fromEntries(Object.entries(GROUP_META).map(([id,g])=>[id,g.count])),total:QUESTION_TOTAL});
+    if (path === '/api/config') return sendJson(res,200,{ok:true,domain:config.publicUrl,providers:{jev:{configured:!!config.jev.apiKey,base_url:config.jev.baseUrl,model:config.jev.model||null},nvidia:{configured:!!config.nvidia.apiKey,base_url:config.nvidia.baseUrl,model:config.nvidia.model},chutes:{configured:!!config.chutes.apiKey,base_url:config.chutes.baseUrl,image:!!config.chutes.imageUrl,video:!!config.chutes.videoUrl},speech:{configured:true,base_url:config.speech.baseUrl,model:config.speech.model,language:config.speech.language}},groups:Object.fromEntries(Object.entries(GROUP_META).map(([id,g])=>[id,g.count])),total:QUESTION_TOTAL,v2:true});
+    if (path === '/api/models' && req.method === 'GET') {
+      const refresh=url.searchParams.get('refresh')==='1';
+      const models=await listModels({refresh});
+      return sendJson(res,200,{ok:true,tasks:modelTasks(),models});
+    }
+    if (path === '/api/models/route' && req.method === 'POST') {
+      const body=await readJson(req,30_000);
+      const routed=await routeModel({
+        task:String(body.task||'copy'),
+        mode:String(body.mode||'auto'),
+        preferredKey:String(body.preferredKey||''),
+        context:String(body.context||'').slice(0,1200),
+      });
+      return sendJson(res,200,{ok:true,...routed});
+    }
     if (path === '/api/projects' && req.method === 'GET') return sendJson(res,200,{ok:true,projects:await listProjects(session.email),limits:projectLimits});
     if (path === '/api/projects' && req.method === 'POST') {
       const body=await readJson(req,30_000);
@@ -232,13 +249,21 @@ const server = http.createServer(async (req, res) => {
       res.on('close',()=>controller.abort());
       res.writeHead(200,{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-store, no-transform','connection':'keep-alive','x-accel-buffering':'no'});
       const event=(name,data)=>{ if(!res.destroyed) res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`); };
-      event('inicio',{provider:'nvidia',model:config.nvidia.model,campos:11});
-      event('fila',{provider:'nvidia',waiting:0});
+      const modelRoute=await routeModel({
+        task:'copy',
+        mode:String(body.modelMode||'auto'),
+        preferredKey:String(body.modelKey||''),
+        context:text,
+      });
+      const worker=modelRoute.selected;
+      event('inicio',{provider:worker.provider,model:worker.id,campos:11,route:{mode:modelRoute.mode,reason:modelRoute.reason}});
+      event('fila',{provider:worker.provider,waiting:0});
       let fields={};
       try{
         const messages=buildWriterMessages({texto:text,decisoes:body.decisoes});
-        const result=await nvidiaStream({
+        const streamArgs={
           messages,
+          model:worker.id,
           max_tokens:WRITER_MAX_TOKENS,
           temperature:0.7,
           top_p:0.9,
@@ -247,9 +272,12 @@ const server = http.createServer(async (req, res) => {
             fields=parseWriterFields(meta.text);
             event('tok',{delta,fields,chars:meta.text.length,chunks:meta.chunks});
           },
-        });
+        };
+        const result=worker.provider==='chutes'
+          ? await chutesStream(streamArgs)
+          : await nvidiaStream(streamArgs);
         fields=parseWriterFields(result.text);
-        event('fim',{ok:true,fields,complete:writerComplete(fields),model:result.model,ms:result.ms,first_token_ms:result.first_token_ms,chunks:result.chunks});
+        event('fim',{ok:true,fields,complete:writerComplete(fields),provider:worker.provider,model:result.model,route:{mode:modelRoute.mode,reason:modelRoute.reason},ms:result.ms,first_token_ms:result.first_token_ms,chunks:result.chunks});
       }catch(e){
         if(!controller.signal.aborted) event('erro',{ok:false,error:e?.message||'Falha ao escrever.',code:e?.code||'writer_error'});
       }finally{
@@ -260,8 +288,16 @@ const server = http.createServer(async (req, res) => {
     if (path === '/api/text/generate' && req.method === 'POST') {
       const body=await readJson(req,80_000);
       const messages=Array.isArray(body.messages)?body.messages:null;
-      const upstream=await nvidiaChat({messages,model:body.model,temperature:body.temperature,top_p:body.top_p,max_tokens:body.max_tokens,stream:false});
-      return sendJson(res,200,{ok:true,model:upstream.model,choices:upstream.choices,usage:upstream.usage});
+      const routed=await routeModel({
+        task:String(body.task||'copy'),
+        mode:String(body.modelMode||'auto'),
+        preferredKey:String(body.modelKey||''),
+        context:JSON.stringify(messages||[]).slice(0,1200),
+      });
+      const worker=routed.selected;
+      const args={messages,model:worker.id,temperature:body.temperature,top_p:body.top_p,max_tokens:body.max_tokens,stream:false};
+      const upstream=worker.provider==='chutes'?await chutesChat(args):await nvidiaChat(args);
+      return sendJson(res,200,{ok:true,provider:worker.provider,model:upstream.model||worker.id,route:{mode:routed.mode,reason:routed.reason},choices:upstream.choices,usage:upstream.usage});
     }
     if (path === '/' || path === '/index.html' || path === '/studio.js' || path === '/render.mjs' || path === '/variation.mjs' || path === '/export.mjs' || path === '/live.mjs') { const target = path === '/' ? '/index.html' : path; if (await serveStatic(res,PUBLIC,target)) return; }
     sendJson(res,404,{ok:false,error:'Não encontrado.',code:'not_found'});
