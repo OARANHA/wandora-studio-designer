@@ -12,6 +12,7 @@ import { chutesChat, chutesStream } from './ai/chutes.mjs';
 import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
+import { assetLimits, deleteAsset, listAssets, putAsset, readAsset } from './store/assets.mjs';
 import { ROUTE_QUESTIONS, TARGETS, commandQuestions, commandState, routeResult, routeState } from './commands/router.mjs';
 
 assertProductionConfig();
@@ -150,6 +151,30 @@ const server = http.createServer(async (req, res) => {
     if (projectMatch && (req.method === 'PATCH' || req.method === 'POST')) {
       const body=await readJson(req,30_000); const project=await updateProject(session.email,projectMatch[1],body);
       return sendJson(res,200,{ok:true,project});
+    }
+    const assetsMatch=path.match(/^\/api\/projects\/([0-9a-f-]{36})\/assets$/i);
+    if (assetsMatch && req.method === 'GET') {
+      return sendJson(res,200,{ok:true,assets:await listAssets(session.email,assetsMatch[1]),limits:assetLimits});
+    }
+    if (assetsMatch && req.method === 'POST') {
+      const contentType=String(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();
+      const role=String(req.headers['x-asset-role']||'reference').trim();
+      let name='arquivo';
+      try{name=decodeURIComponent(String(req.headers['x-file-name']||'arquivo'));}catch{}
+      const body=await readBuffer(req,assetLimits.bytes+1);
+      const asset=await putAsset({owner:session.email,projectId:assetsMatch[1],role,originalName:name,contentType,buffer:body});
+      return sendJson(res,201,{ok:true,asset});
+    }
+    const assetItemMatch=path.match(/^\/api\/projects\/([0-9a-f-]{36})\/assets\/([0-9a-f-]{36})$/i);
+    if (assetItemMatch && req.method === 'DELETE') {
+      await deleteAsset(session.email,assetItemMatch[1],assetItemMatch[2]);
+      return sendJson(res,200,{ok:true});
+    }
+    const assetContentMatch=path.match(/^\/api\/projects\/([0-9a-f-]{36})\/assets\/([0-9a-f-]{36})\/content$/i);
+    if (assetContentMatch && req.method === 'GET') {
+      const {asset,body}=await readAsset(session.email,assetContentMatch[1],assetContentMatch[2]);
+      res.writeHead(200,{'content-type':asset.contentType,'content-length':body.length,'cache-control':'private, max-age=300','x-content-type-options':'nosniff'});
+      return res.end(body);
     }
     const versionsMatch=path.match(/^\/api\/projects\/([0-9a-f-]{36})\/versions$/i);
     if (versionsMatch && req.method === 'GET') return sendJson(res,200,{ok:true,versions:await listVersions(session.email,versionsMatch[1])});
