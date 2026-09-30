@@ -6,7 +6,7 @@ import { HttpError, clientIp, readForm, readJson, redirect, sendJson, serveStati
 import { authenticate, clearCookieHeader, cookieHeader, logout, sessionFromRequest } from './auth/auth.mjs';
 import { jevDecide } from './ai/jev.mjs';
 import { nvidiaChat } from './ai/nvidia.mjs';
-import { UNDERSTANDING } from './questions/understanding.mjs';
+import { QUESTION_GROUPS, GROUP_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 
 assertProductionConfig();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +33,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('x-robots-tag','noindex, nofollow');
     res.setHeader('x-content-type-options','nosniff');
     res.setHeader('referrer-policy','strict-origin-when-cross-origin');
+    res.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'");
 
     if (path === '/healthz') return sendJson(res, 200, { ok:true, app:'wandora-studio-designer', version:'0.1.0' });
     if (path === '/studio.css' || path.startsWith('/assets/')) { const ok=await serveStatic(res, PUBLIC, path); if(ok)return; }
@@ -49,15 +50,41 @@ const server = http.createServer(async (req, res) => {
 
     const session = requireAuth(req,res); if(!session) return;
     if (path === '/api/auth/me') return sendJson(res,200,{ok:true,user:{email:session.email}});
-    if (path === '/api/config') return sendJson(res,200,{ok:true,domain:config.publicUrl,providers:{jev:{configured:!!config.jev.apiKey,base_url:config.jev.baseUrl,model:config.jev.model||null},nvidia:{configured:!!config.nvidia.apiKey,base_url:config.nvidia.baseUrl,model:config.nvidia.model}},groups:{entender:10,site:28,marca:8,posts:22,email:14,anuncios:7},total:89});
+    if (path === '/api/config') return sendJson(res,200,{ok:true,domain:config.publicUrl,providers:{jev:{configured:!!config.jev.apiKey,base_url:config.jev.baseUrl,model:config.jev.model||null},nvidia:{configured:!!config.nvidia.apiKey,base_url:config.nvidia.baseUrl,model:config.nvidia.model}},groups:Object.fromEntries(Object.entries(GROUP_META).map(([id,g])=>[id,g.count])),total:QUESTION_TOTAL});
     if (path === '/api/decide/understanding' && req.method === 'POST') {
       const body=await readJson(req,20_000); const text=String(body.texto||'').replace(/\s+/g,' ').trim();
       if (text.split(/\s+/).length < 2) throw new HttpError(400,'Descreva o negócio com pelo menos algumas palavras.','text_too_short');
-      const state={fala_da_pessoa:texto.slice(-1500),contexto:'Briefing em português de uma pessoa descrevendo o próprio negócio para criação de site, identidade visual, carrosséis, e-mail e anúncios. Se houver correção ou mudança de ideia, vale o que foi dito por último.'};
-      const started=Date.now(); const result=await jevDecide({state,questions:UNDERSTANDING});
+      const state={fala_da_pessoa:text.slice(-1500),contexto:'Briefing em português de uma pessoa descrevendo o próprio negócio para criação de site, identidade visual, carrosséis, e-mail e anúncios. Se houver correção ou mudança de ideia, vale o que foi dito por último.'};
+      const started=Date.now(); const result=await jevDecide({state,questions:QUESTION_GROUPS.entender});
       return sendJson(res,200,{ok:true,answers:result.answers,model:result.model,usage:result.usage,ms:Date.now()-started});
     }
-   if (path === '/api/text/generate' && req.method === 'POST') {
+    if (path === '/api/decidir' && req.method === 'POST') {
+      const body=await readJson(req,30_000); const text=String(body.texto||'').replace(/\s+/g,' ').trim();
+      if (text.split(/\s+/).length < 2) throw new HttpError(400,'Descreva o negócio com pelo menos algumas palavras.','text_too_short');
+      const seq=Number.isFinite(Number(body.seq))?Number(body.seq):0;
+      const state={fala_da_pessoa:text.slice(-1500),contexto:'Transcrição de voz ao vivo (pode estar incompleta e sem pontuação) de uma pessoa descrevendo o próprio negócio. Com base nela vamos criar site, identidade visual, carrosséis de Instagram, e-mail marketing (template e assinatura) e anúncios de display. Se a pessoa mudar de ideia ou corrigir algo no meio da fala, vale o que ela disse por último.'};
+      const controller=new AbortController();
+      res.on('close',()=>controller.abort());
+      res.writeHead(200,{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-store, no-transform','connection':'keep-alive','x-accel-buffering':'no'});
+      const event=(name,data)=>{ if(!res.destroyed) res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`); };
+      event('start',{seq,total:QUESTION_TOTAL,groups:Object.keys(QUESTION_GROUPS)});
+      const started=Date.now();
+      const jobs=Object.entries(QUESTION_GROUPS).map(async([group,questions])=>{
+        const t=Date.now();
+        try {
+          const result=await jevDecide({state,questions,signal:controller.signal});
+          event('group',{seq,group,answers:result.answers,model:result.model||null,usage:result.usage||null,ms:Date.now()-t});
+          return {group,ok:true};
+        } catch(e) {
+          if(e?.code!=='request_cancelled') event('group_error',{seq,group,error:e?.message||'Falha no Jev.',code:e?.code||'jev_error',ms:Date.now()-t});
+          return {group,ok:false,code:e?.code||'jev_error'};
+        }
+      });
+      const settled=await Promise.all(jobs);
+      if(!controller.signal.aborted){ event('done',{seq,ok:settled.every(x=>x.ok),groups:settled,ms:Date.now()-started}); res.end(); }
+      return;
+    }
+    if (path === '/api/text/generate' && req.method === 'POST') {
       const body=await readJson(req,80_000);
       const messages=Array.isArray(body.messages)?body.messages:null;
       const upstream=await nvidiaChat({messages,model:body.model,temperature:body.temperature,top_p:body.top_p,max_tokens:body.max_tokens,stream:false});

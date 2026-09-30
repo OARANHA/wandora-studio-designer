@@ -1,13 +1,21 @@
 import { config } from '../config.mjs';
 import { HttpError } from '../lib/http.mjs';
 
-export async function jevDecide({ state, questions, model }) {
+export async function jevDecide({ state, questions, model, signal }) {
   if (!config.jev.apiKey) throw new HttpError(503, 'Jev ainda não está configurado neste ambiente.', 'jev_not_configured');
   if (!state || !questions || typeof questions !== 'object' || Array.isArray(questions)) throw new HttpError(400, 'state e questions são obrigatórios.', 'bad_request');
   const ids = Object.keys(questions);
   if (!ids.length || ids.length > 160) throw new HttpError(400, 'questions precisa ter entre 1 e 160 perguntas.', 'bad_request');
+
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.jev.timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, config.jev.timeoutMs);
+  const onExternalAbort = () => controller.abort(signal?.reason);
+  if (signal) {
+    if (signal.aborted) onExternalAbort();
+    else signal.addEventListener('abort', onExternalAbort, { once:true });
+  }
+
   try {
     const body = { state, questions, ...(model || config.jev.model ? { model: model || config.jev.model } : {}) };
     const r = await fetch(`${config.jev.baseUrl}/v1/systemone`, {
@@ -22,7 +30,13 @@ export async function jevDecide({ state, questions, model }) {
     return data;
   } catch (e) {
     if (e instanceof HttpError) throw e;
-    if (e?.name === 'AbortError') throw new HttpError(504, 'O Jev demorou além do limite.', 'jev_timeout');
+    if (e?.name === 'AbortError') {
+      if (signal?.aborted && !timedOut) throw new HttpError(499, 'Requisição cancelada.', 'request_cancelled');
+      throw new HttpError(504, 'O Jev demorou além do limite.', 'jev_timeout');
+    }
     throw new HttpError(502, 'Não foi possível falar com o Jev.', 'jev_network');
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener?.('abort', onExternalAbort);
+  }
 }
