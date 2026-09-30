@@ -1,6 +1,7 @@
 import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderEmail, renderAds } from './render.mjs';
 import { sampleGoodVariants, restoreJevChoices } from './variation.mjs';
 import { buildSiteHtml, buildEmailHtml, buildSignatureHtml, buildAdsHtml, buildProjectJson, downloadText, slugify } from './export.mjs';
+import { createDecisionScheduler, createSignalCables, createVoiceMeter } from './live.mjs';
 const $ = (s) => document.querySelector(s);
 const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), providers=$('#providers');
 const projectSelect=$('#project-select'), projectName=$('#project-name'), clientName=$('#client-name');
@@ -10,10 +11,14 @@ const commandInput=$('#command'), applyCommandBtn=$('#apply-command'), lockStrip
 const versionsDialog=$('#versions-dialog'), versionsList=$('#versions-list'), xrayDialog=$('#xray-dialog'), xrayList=$('#xray-list'), xraySummary=$('#xray-summary');
 const exportDialog=$('#export-dialog'), exportSiteBtn=$('#export-site'), exportEmailBtn=$('#export-email'), exportSignatureBtn=$('#export-signature'), copySignatureBtn=$('#copy-signature'), exportAdsBtn=$('#export-ads'), exportJsonBtn=$('#export-json');
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
-let recognition=null, micListening=false, micStopTimer=null, micBaseText='', micFinalText='';
+const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
+let recognition=null, micListening=false, micWanted=false, micBaseText='', micFinalText='', micInterimText='', voiceMeter=null, liveUpdateCount=0;
 const labels={seg:'Segmento',pers:'Personalidade',pub:'Público',obj:'Objetivo',canal:'Canal',preco:'Preço',mat:'Maturidade',dif:'Diferencial',oferta:'Oferta',emoji:'Emojis'};
 const channel={entender:$('#ch-entender'),site:$('#ch-site'),marca:$('#ch-marca'),posts:$('#ch-posts'),email:$('#ch-email'),anuncios:$('#ch-anuncios')};
 const signal={site:$('#signal-site'),marca:$('#brand-signal'),posts:$('#signal-posts'),email:$('#signal-email'),anuncios:$('#signal-anuncios')};
+const cableTargets={site:$('.monitor.site'),posts:$('.monitor.posts'),marca:$('.monitor.brand-monitor'),email:$('.monitor.email'),anuncios:$('.monitor.ads')};
+const cables=createSignalCables({svg:$('#signal-cables'),source:briefingLabel,targets:cableTargets});
+const decisionScheduler=createDecisionScheduler({getText:()=>briefing.value,run:(text,seq)=>runDecisionUpdate(text,seq,{live:micWanted||micListening})});
 
 function answerText(a){
   if(!a)return '—';
@@ -53,6 +58,7 @@ function resetSignals(){
   Object.keys(channel).forEach(g=>setChannel(g,''));
   Object.keys(signal).forEach(g=>setSignal(g,'sem sinal',false));
   $('#decisoes').textContent='0'; $('#latencia').textContent='—';
+  cables.stop(); decisionScheduler.reset(briefing.value);
 }
 function refreshProjectButtons(){
   openVersionsBtn.disabled=!activeProject;
@@ -446,9 +452,31 @@ function setMicState(listening,message=''){
   micBtn.textContent=micListening?'REC':'MIC';
   if(message)status.textContent=message;
 }
-function stopMic(){
-  if(micStopTimer){clearTimeout(micStopTimer);micStopTimer=null;}
+function paintTranscript(){
+  const fixed=[micBaseText,micFinalText].filter(Boolean).join(micBaseText&&micFinalText?'\n':'');
+  transcriptFinal.textContent=fixed;
+  transcriptInterim.textContent=micInterimText?(fixed?' ':'')+micInterimText:'';
+  liveTranscript.hidden=false;
+  briefingLabel.classList.add('is-listening');
+  liveTranscript.scrollTop=liveTranscript.scrollHeight;
+}
+function closeTranscript(){
+  briefingLabel.classList.remove('is-listening');
+  liveTranscript.hidden=true;
+}
+async function startVoiceMeter(){
+  voiceMeter?.stop?.(); voiceMeter=null;
+  try{
+    const meter=await createVoiceMeter(vuEl);
+    if(!micWanted)meter?.stop?.(); else voiceMeter=meter;
+  }catch{}
+}
+function stopMic(message='Microfone fechado. Atualização final enviada.'){
+  micWanted=false;
   try{recognition?.stop();}catch{}
+  voiceMeter?.stop?.(); voiceMeter=null;
+  setMicState(false,message); closeTranscript();
+  decisionScheduler.schedule({immediate:true});
 }
 function setupMic(){
   const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -462,35 +490,49 @@ function setupMic(){
   recognition.interimResults=true;
   recognition.maxAlternatives=1;
   recognition.onstart=()=>{
-    micBaseText=briefing.value.trim();
-    micFinalText='';
-    setMicState(true,'Microfone aberto. Fale normalmente — até 40 segundos.');
-    micStopTimer=setTimeout(stopMic,40_000);
+    setMicState(true,'🎙️ Ouvindo em português. Fale normalmente — o Studio atualiza durante a frase.');
+    paintTranscript();
   };
   recognition.onresult=(event)=>{
     let interim='';
     for(let i=event.resultIndex;i<event.results.length;i++){
-      const text=event.results[i][0]?.transcript||'';
-      if(event.results[i].isFinal) micFinalText+=(micFinalText?' ':'')+text.trim();
-      else interim+=(interim?' ':'')+text.trim();
+      const text=(event.results[i][0]?.transcript||'').trim();
+      if(!text)continue;
+      if(event.results[i].isFinal)micFinalText+=(micFinalText?' ':'')+text;
+      else interim+=(interim?' ':'')+text;
     }
-    const spoken=[micFinalText,interim].filter(Boolean).join(' ').trim();
+    micInterimText=interim;
+    const spoken=[micFinalText,micInterimText].filter(Boolean).join(' ').trim();
     briefing.value=[micBaseText,spoken].filter(Boolean).join(micBaseText&&spoken?'\n':'').slice(0,3000);
-    briefing.dispatchEvent(new Event('input',{bubbles:true}));
+    paintTranscript();
+    decisionScheduler.schedule();
   };
   recognition.onerror=(event)=>{
     const friendly={not_allowed:'Permissão do microfone negada.',audio_capture:'Microfone não encontrado.',network:'Falha de rede no reconhecimento de voz.',no_speech:'Nenhuma fala detectada.'}[event.error]||`Microfone: ${event.error||'erro'}.`;
+    if(event.error==='not-allowed'||event.error==='audio-capture'){
+      micWanted=false; voiceMeter?.stop?.(); voiceMeter=null; closeTranscript();
+    }
     status.textContent=friendly;
   };
   recognition.onend=()=>{
-    if(micStopTimer){clearTimeout(micStopTimer);micStopTimer=null;}
-    setMicState(false,micFinalText?'Transcrição adicionada ao briefing.':'Microfone fechado.');
+    setMicState(false);
+    if(micWanted&&document.visibilityState==='visible'){
+      setTimeout(()=>{try{recognition.start();}catch{}},120);
+      return;
+    }
+    voiceMeter?.stop?.(); voiceMeter=null; closeTranscript();
   };
   micBtn.disabled=false;
-  micBtn.title='Ditado em português do Brasil (até 40 s)';
+  micBtn.title='Voz ao vivo em português do Brasil';
   micBtn.addEventListener('click',()=>{
-    if(micListening){stopMic();return;}
+    if(micWanted||micListening){stopMic();return;}
+    micWanted=true;
+    micBaseText=briefing.value.trim(); micFinalText=''; micInterimText='';
+    paintTranscript(); void startVoiceMeter();
     try{recognition.start();}catch{status.textContent='O microfone já está iniciando.';}
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden&&micWanted)stopMic('Microfone desligado enquanto a aba estava em segundo plano.');
   });
 }
 
@@ -502,33 +544,57 @@ async function readSse(response,onEvent){
     let cut; while((cut=buffer.indexOf('\n\n'))>=0){const block=buffer.slice(0,cut);buffer=buffer.slice(cut+2);let event='message',data='';for(const line of block.split('\n')){if(line.startsWith('event:'))event=line.slice(6).trim();else if(line.startsWith('data:'))data+=line.slice(5).trim();}if(data)onEvent(event,JSON.parse(data));}
   }
 }
-async function analyze(){
+async function runDecisionUpdate(texto,seq,{live=false}={}){
+  texto=String(texto||'').trim();
+  if(texto.split(/\s+/).filter(Boolean).length<2)return;
   copyController?.abort(); copyGenerating=false;
-  const texto=briefing.value.trim(); if(texto.split(/\s+/).length<2){status.textContent='Escreva pelo menos algumas palavras sobre o negócio.';return;}
-  activeController?.abort(); activeController=new AbortController(); const controller=activeController;
-  latestDecisions={}; latestCopy={}; latestComplete=false; latestVariation=[]; refreshProjectButtons();
-  btn.disabled=true; status.textContent='Abrindo os 6 canais do Jev…'; $('#decisoes').textContent='0'; $('#latencia').textContent='—';
-  Object.keys(channel).forEach(g=>setChannel(g,'working')); Object.keys(signal).forEach(g=>setSignal(g,'recebendo…',false));
+  const controller=new AbortController(); activeController=controller;
+  latestCopy={}; latestComplete=false; latestVariation=[]; refreshProjectButtons();
+  btn.disabled=true; $('#decisoes').textContent='0'; $('#latencia').textContent='—';
+  Object.keys(channel).forEach(g=>setChannel(g,'working'));
+  Object.keys(signal).forEach(g=>setSignal(g,'recebendo…',false));
+  cables.start();
+  status.textContent=live?'🎙️ Ouvindo… nova direção de arte em processamento.':'Abrindo os 6 canais do Jev…';
   const started=performance.now(); let decisions=0, failures=0;
   try{
-    const r=await fetch('/api/decidir',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({texto,seq:Date.now()}),signal:controller.signal});
+    const r=await fetch('/api/decidir',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({texto,seq}),signal:controller.signal});
     await readSse(r,(event,d)=>{
       if(controller!==activeController)return;
       if(event==='group'){
-        latestDecisions[d.group]=applyLocksToGroup(d.group,d.answers||{}); const n=Object.keys(d.answers||{}).length; decisions+=n; $('#decisoes').textContent=String(decisions); setChannel(d.group,'done'); renderGroupSummary(d.group,d.answers,d.ms); status.textContent=`${d.group}: ${n} decisões recebidas.`;
+        const answers=applyLocksToGroup(d.group,d.answers||{});
+        latestDecisions[d.group]=answers;
+        const n=Object.keys(d.answers||{}).length;
+        decisions+=n; $('#decisoes').textContent=String(decisions);
+        setChannel(d.group,'done'); renderGroupSummary(d.group,answers,d.ms);
+        if(d.group!=='entender')cables.arrive(d.group);
+        status.textContent=live?`🎙️ Ouvindo… ${d.group} atualizado (${d.ms||0} ms).`:`${d.group}: ${n} decisões recebidas.`;
       } else if(event==='group_error'){
         failures+=1; setChannel(d.group,'error'); setSignal(d.group,d.code||'erro',false); status.textContent=d.error;
       } else if(event==='done'){
-        $('#latencia').textContent=`${Math.round(performance.now()-started)} ms`; latestComplete=d.ok && decisions===89; refreshProjectButtons();
-        status.textContent=latestComplete?'89 decisões prontas. Você já pode salvar esta versão.':`Canais concluídos com ${failures} erro(s).`;
+        const total=Math.round(performance.now()-started);
+        $('#latencia').textContent=`${total} ms`;
+        latestComplete=d.ok&&decisions===89; liveUpdateCount+=latestComplete?1:0; refreshProjectButtons();
+        status.textContent=live&&micWanted
+          ?`🎙️ Ouvindo… 89 decisões atualizadas em ${total} ms · atualização ${liveUpdateCount}. Continue falando.`
+          :latestComplete?'89 decisões prontas. Você já pode salvar esta versão.':`Canais concluídos com ${failures} erro(s).`;
       }
     });
-  }catch(e){if(e.name!=='AbortError')status.textContent=e.message;}
-  finally{if(controller===activeController)btn.disabled=false;}
+  }catch(e){
+    if(e.name!=='AbortError')status.textContent=e.message;
+  }finally{
+    if(controller===activeController)btn.disabled=false;
+    setTimeout(()=>{if(!decisionScheduler.inFlight)cables.stop();},900);
+  }
+}
+function analyze(){
+  const texto=briefing.value.trim();
+  if(texto.split(/\s+/).filter(Boolean).length<2){status.textContent='Escreva pelo menos algumas palavras sobre o negócio.';return;}
+  decisionScheduler.schedule({immediate:true});
 }
 
 btn.addEventListener('click',analyze);
-briefing.addEventListener('keydown',(e)=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter')analyze();});
+briefing.addEventListener('input',()=>{if(!micWanted)decisionScheduler.schedule();});
+briefing.addEventListener('keydown',(e)=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();decisionScheduler.schedule({immediate:true});}});
 createProjectBtn.addEventListener('click',createProject);
 projectSelect.addEventListener('change',selectProject);
 saveVersionBtn.addEventListener('click',saveVersion);
