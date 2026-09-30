@@ -98,6 +98,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('x-robots-tag','noindex, nofollow');
     res.setHeader('x-content-type-options','nosniff');
     res.setHeader('referrer-policy','strict-origin-when-cross-origin');
+    res.setHeader('permissions-policy','microphone=(self), on-device-speech-recognition=(self)');
     res.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'");
 
     if (path === '/healthz') return sendJson(res, 200, { ok:true, app:'wandora-studio-designer', version:'0.1.0' });
