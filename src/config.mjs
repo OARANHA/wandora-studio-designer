@@ -25,9 +25,12 @@ export const config = Object.freeze({
     apiKey: process.env.NVIDIA_API_KEY || '',
     model: process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b',
     timeoutMs: int('NVIDIA_TIMEOUT_MS', 120_000, 5_000, 180_000),
-    asrUrl: process.env.NVIDIA_ASR_URL || 'https://71203149-d3b7-4460-8231-1be2543a1fca.invocation.api.nvcf.nvidia.com/v1/audio/transcriptions',
-    asrLanguage: process.env.NVIDIA_ASR_LANGUAGE || 'multi',
-    asrTimeoutMs: int('NVIDIA_ASR_TIMEOUT_MS', 45_000, 5_000, 90_000),
+  },
+  speech: {
+    baseUrl: (process.env.STT_BASE_URL || 'http://studio-asr:8000').replace(/\/$/, ''),
+    model: process.env.STT_MODEL || 'Systran/faster-whisper-base',
+    language: process.env.STT_LANGUAGE || 'pt',
+    timeoutMs: int('STT_TIMEOUT_MS', 180_000, 5_000, 300_000),
   },
 });
 
