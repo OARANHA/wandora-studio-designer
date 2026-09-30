@@ -12,8 +12,9 @@ const versionsDialog=$('#versions-dialog'), versionsList=$('#versions-list'), xr
 const exportDialog=$('#export-dialog'), exportSiteBtn=$('#export-site'), exportEmailBtn=$('#export-email'), exportSignatureBtn=$('#export-signature'), copySignatureBtn=$('#copy-signature'), exportAdsBtn=$('#export-ads'), exportManualBtn=$('#export-manual'), exportJsonBtn=$('#export-json');
 const openModelsBtn=$('#open-models'), modelsDialog=$('#models-dialog'), modelGrid=$('#model-grid'), modelRouteStatus=$('#model-route-status'), saveModelRoutingBtn=$('#save-model-routing');
 const openAssetsBtn=$('#open-assets'), assetsDialog=$('#assets-dialog'), assetRole=$('#asset-role'), assetFile=$('#asset-file'), uploadAssetBtn=$('#upload-asset'), assetGrid=$('#asset-grid');
+const mediaPrompt=$('#media-prompt'), generateImageBtn=$('#generate-image'), generateVideoBtn=$('#generate-video'), mediaStatus=$('#media-status');
 const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGenerateKitBtn=$('#confirm-generate-kit'), kitStatus=$('#kit-status');
-let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
+let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, chutesImageReady=false, chutesVideoReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
 let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}};
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
 const voiceDiag=$('#voice-diag'), voiceStages=Object.fromEntries([...voiceDiag.querySelectorAll('[data-stage]')].map(el=>[el.dataset.stage,el]));
@@ -89,12 +90,17 @@ async function loadConfig(){
     const c=await json('/api/config');
     nvidiaReady=!!c.providers.nvidia.configured;
     chutesReady=!!c.providers.chutes?.configured;
+    chutesImageReady=chutesReady&&!!c.providers.chutes?.image;
+    chutesVideoReady=chutesReady&&!!c.providers.chutes?.video;
     writerReady=nvidiaReady||chutesReady;
     providers.textContent=`JEV ${c.providers.jev.configured?'●':'○'} · NVIDIA ${nvidiaReady?'●':'○'} · CHUTES ${chutesReady?'●':'○'} · VOZ ${c.providers.speech?.configured?'●':'○'} · V2`;
     providers.classList.toggle('ready',c.providers.jev.configured&&writerReady);
     generateCopyBtn.title=writerReady?'Writer roteado pelo Jev':'Configure NVIDIA_API_KEY ou CHUTES_API_KEY';
+    generateImageBtn.disabled=!chutesImageReady; generateVideoBtn.disabled=!chutesVideoReady;
+    generateImageBtn.title=chutesImageReady?'Gerar imagem no Chutes':'Configure CHUTES_API_KEY e CHUTES_IMAGE_URL';
+    generateVideoBtn.title=chutesVideoReady?'Gerar vídeo curto no Chutes':'Configure CHUTES_API_KEY e CHUTES_VIDEO_URL';
     refreshProjectButtons();
-  }catch{providers.textContent='IA indisponível';nvidiaReady=false;chutesReady=false;writerReady=false;refreshProjectButtons();}
+  }catch{providers.textContent='IA indisponível';nvidiaReady=false;chutesReady=false;chutesImageReady=false;chutesVideoReady=false;writerReady=false;generateImageBtn.disabled=true;generateVideoBtn.disabled=true;refreshProjectButtons();}
 }
 async function loadProjects(selectId=null){
   const d=await json('/api/projects');
@@ -500,12 +506,18 @@ function renderAssets(){
   assetGrid.replaceChildren();
   if(!assetItems.length){const p=document.createElement('p');p.textContent='Nenhum ativo enviado ainda. Suba o logo ou mascote deste cliente.';assetGrid.append(p);return;}
   for(const a of assetItems){
-    const card=document.createElement('article');card.className='asset-card';
-    const img=document.createElement('img');img.src=`/api/projects/${activeProject.id}/assets/${a.id}/content`;img.alt=a.name;img.loading='lazy';
+    const card=document.createElement('article');card.className='asset-card';if(String(a.role).startsWith('generated-'))card.classList.add('generated');
+    const url=`/api/projects/${activeProject.id}/assets/${a.id}/content`;
+    let media;
+    if(a.contentType==='video/mp4'){
+      media=document.createElement('video');media.src=url;media.controls=true;media.muted=true;media.preload='metadata';media.playsInline=true;
+    }else{
+      media=document.createElement('img');media.src=url;media.alt=a.name;media.loading='lazy';
+    }
     const meta=document.createElement('div');meta.className='asset-meta';const b=document.createElement('b'),small=document.createElement('small');b.textContent=a.name;small.textContent=`${a.role} · ${Math.ceil(a.size/1024)} KB`;meta.append(b,small);
     const del=document.createElement('button');del.type='button';del.textContent='×';del.title='Excluir ativo';
     del.addEventListener('click',async()=>{await fetch(`/api/projects/${activeProject.id}/assets/${a.id}`,{method:'DELETE'});await loadAssets();});
-    card.append(img,meta,del);assetGrid.append(card);
+    card.append(media,meta,del);assetGrid.append(card);
   }
 }
 async function openAssets(){if(!activeProject)return;assetsDialog.showModal();assetGrid.textContent='Carregando…';try{await loadAssets();}catch(e){assetGrid.textContent=e.message;}}
@@ -518,6 +530,25 @@ async function uploadAsset(){
     assetFile.value='';await loadAssets();status.textContent=`Ativo “${d.asset.name}” salvo no projeto.`;
   }catch(e){status.textContent=e.message;}finally{uploadAssetBtn.disabled=false;}
 }
+async function generateMedia(kind){
+  if(!activeProject)return;
+  const prompt=mediaPrompt.value.trim();
+  if(prompt.length<4){mediaStatus.textContent='Descreva o visual que quer criar.';mediaPrompt.focus();return;}
+  const button=kind==='image'?generateImageBtn:generateVideoBtn;
+  button.disabled=true;
+  mediaStatus.textContent=kind==='image'?'Gerando imagem no Chutes…':'Gerando vídeo curto no Chutes… isso pode levar alguns minutos.';
+  try{
+    const d=await json(`/api/v2/media/${kind}`,{method:'POST',body:JSON.stringify({projectId:activeProject.id,prompt})});
+    await loadAssets();
+    mediaStatus.textContent=`✓ ${kind==='image'?'Imagem':'Vídeo'} salvo nos ativos do projeto · ${d.asset.name}`;
+    status.textContent=`Mídia IA criada e anexada ao projeto.`;
+  }catch(e){
+    mediaStatus.textContent=`⚠ ${e.message}`;
+  }finally{
+    button.disabled=kind==='image'?!chutesImageReady:!chutesVideoReady;
+  }
+}
+
 function openKit(){if(!activeProject)return;kitStatus.textContent='';kitDialog.showModal();}
 async function generateCompleteKit(){
   const materials=[...kitDialog.querySelectorAll('.kit-checks input:checked')].map(x=>x.value);
@@ -799,6 +830,8 @@ modelsDialog.querySelectorAll('input[name="routing-mode"]').forEach(r=>r.addEven
 saveModelRoutingBtn.addEventListener('click',saveModelRouting);
 openAssetsBtn.addEventListener('click',openAssets);
 uploadAssetBtn.addEventListener('click',uploadAsset);
+generateImageBtn.addEventListener('click',()=>generateMedia('image'));
+generateVideoBtn.addEventListener('click',()=>generateMedia('video'));
 generateKitBtn.addEventListener('click',openKit);
 confirmGenerateKitBtn.addEventListener('click',generateCompleteKit);
 document.querySelectorAll('.v2-nav button').forEach(b=>b.addEventListener('click',()=>selectV2Tab(b.dataset.v2Tab)));
