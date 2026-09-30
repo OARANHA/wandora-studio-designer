@@ -14,6 +14,7 @@ import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './qu
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
 import { assetLimits, deleteAsset, listAssets, putAsset, readAsset } from './store/assets.mjs';
 import { ROUTE_QUESTIONS, TARGETS, commandQuestions, commandState, routeResult, routeState } from './commands/router.mjs';
+import { routeSiteStructure } from './v2/site-structure.mjs';
 
 assertProductionConfig();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -221,6 +222,13 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res,200,{ok:true,tipo,alvo,p_tipo,p_alvo,answers:decided.answers,modo:'biblioteca',ajustes:[],answers_ajuste:null,latency_ms:Date.now()-started,_jev:trace});
     }
 
+    if (path === '/api/v2/site-command' && req.method === 'POST') {
+      const body=await readJson(req,40_000);
+      const command=String(body.command||body.comando||'').replace(/\s+/g,' ').trim().slice(0,500);
+      if(command.split(/\s+/).filter(Boolean).length<2) throw new HttpError(400,'Comando estrutural curto demais.','structure_command_too_short');
+      const result=await routeSiteStructure({command,briefing:String(body.briefing||'').slice(0,2000),current:body.current&&typeof body.current==='object'?body.current:{}});
+      return sendJson(res,200,{ok:true,...result});
+    }
     if (path === '/api/decide/understanding' && req.method === 'POST') {
       const body=await readJson(req,20_000); const text=String(body.texto||'').replace(/\s+/g,' ').trim();
       if (text.split(/\s+/).length < 2) throw new HttpError(400,'Descreva o negócio com pelo menos algumas palavras.','text_too_short');
