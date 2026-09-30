@@ -29,7 +29,7 @@ jobs:
           node --check src/server.mjs
           node --check src/ai/jev.mjs
           node --check src/ai/nvidia.mjs
-          node --check src/ai/nvidia-asr.mjs
+          node --check src/ai/speech.mjs
           node --check src/ai/writer.mjs
           node --check src/commands/router.mjs
           node --check src/commands/adjustments.mjs
@@ -42,5 +42,7 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Validate Compose
+        run: docker compose config >/dev/null
       - name: Build Docker image
         run: docker build --tag wandora-studio-designer:ci .
