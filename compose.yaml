@@ -25,6 +25,11 @@ services:
       NVIDIA_TIMEOUT_MS: ${NVIDIA_TIMEOUT_MS:-120000}
     ports:
       - "127.0.0.1:${STUDIO_HOST_PORT:-3210}:${PORT:-3210}"
+    expose:
+      - "3210"
+    networks:
+      - default
+      - vigia-edge
     volumes:
       - studio_data:/app/data
     read_only: true
@@ -48,3 +53,8 @@ services:
 volumes:
   studio_data:
     name: wandora-studio-designer-data
+
+networks:
+  vigia-edge:
+    external: true
+    name: vigia-edge
