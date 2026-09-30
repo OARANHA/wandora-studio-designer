@@ -45,3 +45,13 @@
 .rx-main{margin-top:5px;font-size:10px;font-weight:800}.rx-sub{margin-top:4px;font-size:9px;color:#595954;line-height:1.35}.rx-doubt{color:#9a4b12;font-weight:800}
 .rx-bar{display:block;height:4px;margin-top:5px;border-radius:999px;background:linear-gradient(90deg,#3cb371 var(--p),#a7a79f var(--p));box-shadow:inset 0 1px 1px #0003}
 @media(max-width:700px){.xray-dialog,.versions-dialog{width:calc(100vw - 14px);max-height:92vh}.xray-list{padding:7px}.rx-l{padding:7px 8px}}
+
+
+/* Talkback + command locks */
+.talkback{display:grid;grid-template-columns:minmax(0,1fr) 74px;gap:7px;align-items:end;margin-top:10px}
+.talkback .screen-label{min-width:0}.talkback input{display:block;width:100%;height:36px;margin-top:5px;border:1px solid #000;border-radius:6px;background:#111;color:#f5efd9;padding:8px 9px;font-size:11px;box-shadow:inset 0 2px 7px #000}
+.talkback input:focus{outline:3px solid #f4c430;outline-offset:2px}.talkback .key{height:36px;margin-bottom:0;background:linear-gradient(#ffd659,#edb91d);box-shadow:inset 0 1px 0 #fff9,0 3px 0 #8d6810}
+.lock-strip{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;padding:6px;border:1px dashed #8f8466;border-radius:6px;background:#f5efd980}
+.lock-tape{border:0;background:#f5efd9;color:#24231e;padding:5px 8px;font:italic 700 9px Georgia,serif;transform:rotate(-.5deg);box-shadow:0 1px 3px #0004;cursor:pointer}
+.lock-tape:nth-child(even){transform:rotate(.7deg)}.lock-tape:hover{background:#fff8df}.lock-tape:focus-visible{outline:2px solid #2f6fdb;outline-offset:2px}
+@media(max-width:700px){.talkback{grid-template-columns:minmax(0,1fr) 68px}.lock-strip{margin-bottom:4px}}
