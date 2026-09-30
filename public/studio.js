@@ -77,7 +77,7 @@ function refreshProjectButtons(){
   openModelsBtn.textContent=`MODELOS · ${String(modelRouting.mode||'auto').toUpperCase()}`;
   anotherVersionBtn.disabled=!latestComplete;
   xrayBtn.disabled=!latestComplete;
-  applyCommandBtn.disabled=!latestComplete || commandBusy;
+  applyCommandBtn.disabled=commandBusy;
   backJevBtn.hidden=!latestVariation.length;
   exportBtn.disabled=!latestComplete;
 }
@@ -370,7 +370,7 @@ function localStructuralIntent(comando){
   else if(/\b(remove|remova|tirar|tira|excluir|exclui|apagar|apaga|esconder|esconde)\b/.test(s))operation='remove';
   else if(/\b(move|mover|sobe|subir|desce|descer|reordena|reordenar)\b/.test(s))operation='reorder';
   const section=hit[0];
-  let heroVariant='split';
+  let heroVariant=section==='hero'&&operation==='add'?'mascot_right':'split';
   if(section==='hero'){
     if(/\b(mascote|personagem|robo|robot)\b/.test(s))heroVariant='mascot_right';
     else if(/\b(dashboard|painel|mockup|interface)\b/.test(s))heroVariant='dashboard_right';
