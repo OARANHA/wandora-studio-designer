@@ -34,6 +34,7 @@ jobs:
           node --check src/store/assets.mjs
           node --check src/ai/model-registry.mjs
           node --check src/ai/chutes.mjs
+          node --check src/ai/chutes-media.mjs
           node --check src/commands/router.mjs
           node --check src/commands/adjustments.mjs
           node --check src/v2/site-structure.mjs
