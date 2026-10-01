@@ -1,7 +1,7 @@
 import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderStories, renderEmail, renderAds, renderManual } from './render.mjs?v=20261001-structure1';
 import { sampleGoodVariants, restoreJevChoices } from './variation.mjs?v=20261001-structure1';
 import { buildSiteHtml, buildEmailHtml, buildSignatureHtml, buildAdsHtml, buildBrandManualHtml, buildProjectJson, downloadText, slugify } from './export.mjs?v=20261001-structure1';
-import { createBackendVoiceCapture, createDecisionScheduler, createSignalCables, mergeTranscriptText } from './live.mjs?v=20261001-structure1';
+import { createBackendVoiceCapture, createDecisionScheduler, createSignalCables, mergeTranscriptText } from './live.mjs?v=20261001-voice1';
 const $ = (s) => document.querySelector(s);
 const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), providers=$('#providers');
 const projectSelect=$('#project-select'), projectName=$('#project-name'), clientName=$('#client-name');
