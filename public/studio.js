@@ -14,7 +14,7 @@ const openModelsBtn=$('#open-models'), modelsDialog=$('#models-dialog'), modelGr
 const openAssetsBtn=$('#open-assets'), assetsDialog=$('#assets-dialog'), assetRole=$('#asset-role'), assetFile=$('#asset-file'), uploadAssetBtn=$('#upload-asset'), assetGrid=$('#asset-grid');
 const mediaPrompt=$('#media-prompt'), generateImageBtn=$('#generate-image'), generateVideoBtn=$('#generate-video'), mediaStatus=$('#media-status');
 const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGenerateKitBtn=$('#confirm-generate-kit'), kitStatus=$('#kit-status');
-const previewDialog=$('#preview-dialog'), previewTitle=$('#preview-title'), previewFrame=$('#preview-frame'), previewClone=$('#preview-clone'), previewCommand=$('#preview-command'), previewApplyBtn=$('#preview-apply'), previewExportBtn=$('#preview-export'), previewCloseBtn=$('#preview-close');
+const previewDialog=$('#preview-dialog'), previewTitle=$('#preview-title'), previewFrame=$('#preview-frame'), previewClone=$('#preview-clone'), previewCommand=$('#preview-command'), previewApplyBtn=$('#preview-apply'), previewExportBtn=$('#preview-export'), previewCloseBtn=$('#preview-close'), previewMicBtn=$('#preview-mic');
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, chutesImageReady=false, chutesVideoReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
 let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}};
 let activePreviewKind='';
@@ -782,6 +782,11 @@ function setMicState(listening,message=''){
   micBtn.classList.toggle('is-listening',micListening);
   micBtn.setAttribute('aria-pressed',String(micListening));
   micBtn.textContent=micListening?'REC':'MIC';
+  if(previewMicBtn){
+    previewMicBtn.classList.toggle('is-listening',micListening);
+    previewMicBtn.setAttribute('aria-pressed',String(micListening));
+    previewMicBtn.textContent=micListening?'● REC':'● MIC';
+  }
   if(message)status.textContent=message;
 }
 function paintTranscript(){
@@ -979,6 +984,7 @@ document.querySelectorAll('[data-action-export]').forEach(b=>b.addEventListener(
   ['.monitor.stories','stories'],['.monitor.email','email'],['.monitor.ads','ads'],['.monitor.manual','manual']
 ].forEach(([selector,kind])=>document.querySelector(selector)?.addEventListener('click',()=>openMaterialPreview(kind)));
 previewCloseBtn.addEventListener('click',()=>previewDialog.close());
+previewMicBtn.addEventListener('click',()=>micBtn.click());
 previewApplyBtn.addEventListener('click',applyPreviewCommand);
 previewCommand.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPreviewCommand();}});
 previewExportBtn.addEventListener('click',exportActivePreview);
