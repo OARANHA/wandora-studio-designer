@@ -18,10 +18,32 @@ function palette(decisions={},v2={}){
   if(Array.isArray(explicit)&&explicit.length>=5&&explicit.every(x=>/^#[0-9a-f]{6}$/i.test(String(x||''))))return explicit.slice(0,5);
   const key=choice(decisions?.marca?.paleta);
   const maps={
-    rock:['#141414','#e23b2e','#f4efd9','#86867f','#f4c430'], luxo:['#0f0f10','#c7a45b','#f5f0e5','#5d5d61','#2a2117'],
-    corporativo:['#16385c','#f7fafc','#6aa6d8','#1c2530','#d9e5ef'], neon:['#25272b','#c9ff27','#f7f7f0','#3c65ff','#ff4d8e'],
-    mono:['#111111','#f7f7f4','#777777','#d8d8d2','#2f2f2f'], tropical:['#236f53','#f28d35','#e65771','#f3cf45','#f5f1de'],
-    lavanda:['#a89cc8','#dbe2ea','#f5f1f7','#5c5870','#cad6c9'], terra:['#8f432d','#c68b59','#e8d6b7','#5f6b48','#2e2924'],
+    rock:['#141414','#e23b2e','#f4efd9','#86867f','#f4c430'],
+    terra:['#8f432d','#c68b59','#e8d6b7','#5f6b48','#2e2924'],
+    italiano:['#b5252a','#39704a','#f4efd9','#d5b55c','#222222'],
+    nude:['#e9d2c3','#c99c8f','#f7efe8','#7d5a4f','#b78d55'],
+    luxo:['#0f0f10','#c7a45b','#f5f0e5','#5d5d61','#2a2117'],
+    vinho:['#6c1d32','#efe4cf','#b99c66','#292122','#9d6b75'],
+    salvia:['#7c8f79','#e7e0cf','#b69371','#394237','#c9bca8'],
+    menta:['#8fd3b4','#f7f6ee','#f19b89','#254e45','#d5e7de'],
+    tropical:['#236f53','#f28d35','#e65771','#f3cf45','#f5f1de'],
+    cafe:['#4a3026','#d0a267','#f4e7d2','#8b5e3c','#1f1815'],
+    pastel:['#b9a4dc','#f2c6d6','#b9dfd2','#f4d7a8','#fffaf1'],
+    candy:['#f05f9d','#f4d64a','#67c8e5','#a986d9','#fff8ed'],
+    clinico:['#77b8df','#f8fbfc','#d7eef7','#2e5e75','#b9d9e8'],
+    lavanda:['#a89cc8','#dbe2ea','#f5f1f7','#5c5870','#cad6c9'],
+    corporativo:['#16385c','#f7fafc','#6aa6d8','#1c2530','#d9e5ef'],
+    noite:['#111827','#c7a45b','#f5f2e8','#2d3f62','#6e5d40'],
+    floresta:['#244b39','#f2ecdd','#7a8c68','#342b23','#b9a47a'],
+    neon:['#25272b','#c9ff27','#f7f7f0','#3c65ff','#ff4d8e'],
+    criativo:['#6f3cc3','#f2c94c','#ff6b6b','#f8f5ef','#2d2440'],
+    coral:['#126f78','#ff7d6c','#f8f2df','#173f45','#f4b36b'],
+    energia:['#f26b2d','#171717','#f7f1da','#ffc72c','#8d2c16'],
+    amarelo:['#f4c430','#171717','#f7f1da','#696969','#fff2a6'],
+    pink:['#f24f9b','#171717','#f7e8f2','#9f2a67','#f29fc7'],
+    mediterraneo:['#164e9b','#f8f6ef','#f4d34f','#75b7d9','#d9b16d'],
+    retro:['#cb6d38','#c79a2b','#6e4b31','#f0dcc0','#2c514c'],
+    mono:['#111111','#f7f7f4','#777777','#d8d8d2','#2f2f2f'],
   };
   return maps[key] || maps.mono;
 }
