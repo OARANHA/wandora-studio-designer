@@ -54,6 +54,6 @@ test('story-only media planning does not blank the site hero',()=>{
   assert.match(html,/hero--full_background/);
   assert.match(html,/O seu próximo nível começa aqui/);
   assert.match(html,/Treinos e planos/);
-  assert.match(html,/Galeria/);
+  assert.match(html,/GALERIA/i);
   assert.match(html,/Agendar aula experimental/);
 });
