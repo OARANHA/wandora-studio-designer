@@ -71,7 +71,10 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('x-content-type-options','nosniff');
     res.setHeader('referrer-policy','strict-origin-when-cross-origin');
     res.setHeader('permissions-policy','microphone=(self), on-device-speech-recognition=(self)');
-    res.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'");
+    // The Studio renders generated HTML in sandboxed srcdoc iframes. srcdoc inherits
+    // this CSP, so inline styles must be permitted or the site/e-mail/manual previews
+    // fall back to raw browser HTML with no layout. Scripts remain restricted to self.
+    res.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'");
 
     if (path === '/healthz') return sendJson(res, 200, { ok:true, app:'wandora-studio-designer', version:'0.1.0' });
     if (path === '/brand/login.webp' || path === '/brand/logo.webp') {
