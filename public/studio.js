@@ -31,7 +31,7 @@ const channel={entender:$('#ch-entender'),site:$('#ch-site'),marca:$('#ch-marca'
 const signal={site:$('#signal-site'),marca:$('#brand-signal'),posts:$('#signal-posts'),email:$('#signal-email'),anuncios:$('#signal-anuncios')};
 const cableTargets={site:$('.monitor.site'),posts:$('.monitor.posts'),marca:$('.monitor.brand-monitor'),email:$('.monitor.email'),anuncios:$('.monitor.ads')};
 const cables=createSignalCables({svg:$('#signal-cables'),source:briefingLabel,targets:cableTargets});
-const decisionScheduler=createDecisionScheduler({getText:()=>briefing.value,run:(text,seq)=>runDecisionUpdate(text,seq,{live:micWanted||micListening})});
+const decisionScheduler=createDecisionScheduler({getText:()=>briefing.value,run:(text,seq)=>runDecisionUpdate(text,seq,{live:micWanted||micListening}),debounceMs:1100,maxWaitMs:3000,afterBusyMs:220});
 
 const BRIEFING_COLOR_DEFS=[
   ['vermelho','Vermelho','#d62828',['vermelho','vermelha','red']],
@@ -1102,7 +1102,7 @@ function closeTranscript(){
 async function transcribeVoiceSegment(wav,{durationMs=0,forced=false,session}={}){
   if(session!==voiceSession)return;
   voiceStage('text','active',`Transcrevendo ${Math.round(durationMs)} ms`);
-  status.textContent=forced?'🎙️ Transcrevendo enquanto você continua falando…':'🎙️ Transcrevendo a última fala…';
+  status.textContent=forced?'🎙️ Capturando sua frase…':'🎙️ Transcrevendo a última fala…';
   try{
     const r=await fetch('/api/transcribe',{
       method:'POST',
@@ -1113,9 +1113,10 @@ async function transcribeVoiceSegment(wav,{durationMs=0,forced=false,session}={}
     if(!r.ok)throw Object.assign(new Error(d.error||`Falha na transcrição (${r.status})`),{code:d.code,status:r.status});
     if(session!==voiceSession)return;
     const text=String(d.text||'').replace(/\s+/g,' ').trim();
-    if(!text){
-      voiceStage('text','active','Trecho sem palavras reconhecidas');
-      status.textContent='🎙️ Ouvindo… continue falando.';
+    const words=text.split(/\s+/).filter(Boolean);
+    if(!text || (durationMs<650&&words.length<2)){
+      voiceStage('text','active','Ruído ignorado');
+      status.textContent='🎙️ Ouvindo…';
       return;
     }
     micFinalText=mergeTranscriptText(micFinalText,text);
@@ -1123,9 +1124,13 @@ async function transcribeVoiceSegment(wav,{durationMs=0,forced=false,session}={}
     const spoken=micFinalText.trim();
     briefing.value=[micBaseText,spoken].filter(Boolean).join(micBaseText&&spoken?'\n':'').slice(0,3000);
     paintTranscript();
-    voiceStage('text','ok',`Whisper local · ${d.ms||0} ms`);
-    status.textContent=`✓ Texto recebido em ${d.ms||0} ms · atualizando direção de arte…`;
-    decisionScheduler.schedule({immediate:true});
+    voiceStage('text','ok',`Whisper · ${d.ms||0} ms`);
+    if(forced){
+      status.textContent='🎙️ Texto parcial recebido · continue falando.';
+      return;
+    }
+    status.textContent=`✓ Frase recebida em ${d.ms||0} ms · consolidando direção…`;
+    decisionScheduler.schedule();
   }catch(e){
     if(session!==voiceSession)return;
     voiceStage('text','error',e.code||e.message);
@@ -1182,9 +1187,9 @@ function setupMic(){
           voiceStage('text','error',e?.message||'erro');
           status.textContent='⚠️ Erro no fluxo de voz: '+(e?.message||'erro');
         },
-        silenceMs:460,
-        maxSegmentMs:1800,
-        minSegmentMs:320,
+        silenceMs:320,
+        maxSegmentMs:2600,
+        minSegmentMs:420,
       });
       if(session!==voiceSession){await voiceCapture?.stop?.({flush:false});voiceCapture=null;return;}
       setMicState(true,'🎙️ Ouvindo ao vivo · Whisper local transcreve e o Jev redesenha.');
@@ -1214,17 +1219,22 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
   texto=String(texto||'').trim();
   if(texto.split(/\s+/).filter(Boolean).length<2)return;
   syncBriefingFacts(texto);
-  projectV2={...projectV2,studioContext:null};
   copyController?.abort(); copyGenerating=false;
   const controller=new AbortController(); activeController=controller;
-  latestCopy={}; latestComplete=false; latestVariation=[]; refreshProjectButtons();
-  btn.disabled=true; $('#decisoes').textContent='0'; $('#latencia').textContent='—';
-  Object.keys(channel).forEach(g=>setChannel(g,'working'));
-  Object.keys(signal).forEach(g=>setSignal(g,'recebendo…',false));
-  cables.start();
-  voiceStage('jev','active','Enviando ao Jev');
-  status.textContent=live?'🎙️ Ouvindo… nova direção de arte em processamento.':'Abrindo os 6 canais do Jev…';
-  const started=performance.now(); let decisions=0, failures=0;
+
+  if(!live){
+    projectV2={...projectV2,studioContext:null};
+    latestCopy={}; latestComplete=false; latestVariation=[];
+    $('#decisoes').textContent='0'; $('#latencia').textContent='—';
+    Object.keys(channel).forEach(g=>setChannel(g,'working'));
+    Object.keys(signal).forEach(g=>setSignal(g,'recebendo…',false));
+    cables.start();
+  }
+  refreshProjectButtons();
+  btn.disabled=true;
+  voiceStage('jev','active',live?'Consolidando fala':'Enviando ao Jev');
+  status.textContent=live?'🎙️ Consolidando sua última frase sem trocar o layout…':'Abrindo os 6 canais do Jev…';
+  const started=performance.now(); let decisions=0, failures=0,liveContextApplied=false;
   try{
     const r=await fetch('/api/decidir',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({texto,seq}),signal:controller.signal});
     await readSse(r,(event,d)=>{
@@ -1233,15 +1243,13 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
         const answers=applyLocksToGroup(d.group,d.answers||{});
         latestDecisions[d.group]=answers;
         const n=Object.keys(d.answers||{}).length;
-        decisions+=n; $('#decisoes').textContent=String(decisions);
-        setChannel(d.group,'done'); renderGroupSummary(d.group,answers,d.ms);
-        if(d.group!=='entender')cables.arrive(d.group);
-        status.textContent=live?`🎙️ Ouvindo… ${d.group} atualizado (${d.ms||0} ms).`:`${d.group}: ${n} decisões recebidas.`;
-        const accumulated=Object.values(latestDecisions).reduce((sum,g)=>sum+Object.keys(g||{}).length,0);
-        if(accumulated===89&&!latestComplete){
-          latestComplete=true;
-          refreshProjectButtons();
-          queueMicrotask(()=>finalizeDecisionState(texto,{autoStory:!live}));
+        decisions+=n;
+        if(!live){
+          $('#decisoes').textContent=String(decisions);
+          setChannel(d.group,'done');
+          renderGroupSummary(d.group,answers,d.ms);
+          if(d.group!=='entender')cables.arrive(d.group);
+          status.textContent=`${d.group}: ${n} decisões recebidas.`;
         }
       } else if(event==='group_error'){
         failures+=1; setChannel(d.group,'error'); setSignal(d.group,d.code||'erro',false); status.textContent=d.error;
@@ -1257,20 +1265,32 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
             studioContext:d.context,
             briefingFacts:liveFacts.explicitColors?liveFacts:(d.context.briefingFacts||projectV2.briefingFacts),
           };
+          if(live){
+            renderAll(latestDecisions,latestCopy,viewV2());
+            renderSiteThumbnail();
+            if(previewDialog?.open)renderPreviewContent(activePreviewKind);
+            liveContextApplied=true;
+            decisionFinalizeKey=String(texto||'').trim()+'|'+decisionCount;
+          }
         }
-        liveUpdateCount+=latestComplete?1:0; refreshProjectButtons();
-        if(latestComplete)queueMicrotask(()=>finalizeDecisionState(texto,{autoStory:!live})); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
+        $('#decisoes').textContent=String(decisionCount);
+        liveUpdateCount+=latestComplete?1:0;
+        refreshProjectButtons();
+        voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
         status.textContent=live&&micWanted
-          ?`🎙️ Ouvindo… ${decisionCount} decisões atualizadas em ${total} ms · atualização ${liveUpdateCount}. Continue falando.`
+          ?`🎙️ Ouvindo… direção estabilizada em ${total} ms · continue falando.`
           :latestComplete?'89 decisões prontas. Agora clique em “Gerar kit completo” para produzir textos, imagens e composições.':`Recebi ${decisionCount}/89 decisões; ${failures} canal(is) com erro.`;
       }
     });
-    await finalizeDecisionState(texto,{autoStory:!live});
+    if(!live)await finalizeDecisionState(texto,{autoStory:true});
+    else if(latestComplete&&!liveContextApplied){
+      try{await refreshStudioContext(texto);liveContextApplied=true;}catch{}
+    }
   }catch(e){
     if(e.name!=='AbortError')status.textContent=e.message;
   }finally{
     if(controller===activeController)btn.disabled=false;
-    setTimeout(()=>{if(!decisionScheduler.inFlight)cables.stop();},900);
+    if(!live)setTimeout(()=>{if(!decisionScheduler.inFlight)cables.stop();},900);
   }
 }
 function analyze(){
