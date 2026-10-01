@@ -19,6 +19,7 @@ import { assetLimits, deleteAsset, listAssets, putAsset, readAsset } from './sto
 import { ROUTE_QUESTIONS, TARGETS, commandQuestions, commandState, routeResult, routeState } from './commands/router.mjs';
 import { routeSiteStructure } from './v2/site-structure.mjs';
 import { planCreativeProject } from './creative/creative-plan.mjs';
+import { buildStudioContext } from './creative/studio-context.mjs';
 
 assertProductionConfig();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -238,6 +239,17 @@ const server = http.createServer(async (req, res) => {
       if(!controller.signal.aborted){ event('done',{seq,ok:settled.every(x=>x.ok),groups:settled,ms:Date.now()-started}); res.end(); }
       return;
     }
+    if (path === '/api/v2/context' && req.method === 'POST') {
+      const body=await readJson(req,180_000);
+      const briefingText=String(body.briefing||'').trim().slice(0,5000);
+      const decisions=body.decisions&&typeof body.decisions==='object'&&!Array.isArray(body.decisions)?body.decisions:{};
+      const context=buildStudioContext({
+        decisions,
+        briefing:briefingText,
+        brandName:String(body.brandName||'').trim().slice(0,120),
+      });
+      return sendJson(res,200,{ok:true,context});
+    }
     if (path === '/api/v2/creative-plan' && req.method === 'POST') {
       const body=await readJson(req,160_000);
       const projectId=String(body.projectId||'');
@@ -245,7 +257,12 @@ const server = http.createServer(async (req, res) => {
       const briefingText=String(body.briefing||project.briefing||'').trim().slice(0,5000);
       if(briefingText.split(/\s+/).filter(Boolean).length<2) throw new HttpError(400,'Descreva o negócio antes de criar o plano criativo.','creative_plan_briefing_required');
       const materials=Array.isArray(body.materials)?body.materials:(project.v2?.materials||[]);
-      const plan=await planCreativeProject({projectId,briefing:briefingText,materials,useJev:body.useJev!==false});
+      const plan=await planCreativeProject({
+        projectId,briefing:briefingText,materials,useJev:body.useJev!==false,
+        decisions:body.decisions&&typeof body.decisions==='object'?body.decisions:{},
+        brandName:project.clientName||'',
+        studioContext:body.studioContext&&typeof body.studioContext==='object'?body.studioContext:null,
+      });
       const previousAssets=Array.isArray(project.v2?.creativePlan?.assets)?project.v2.creativePlan.assets:[];
       if(Array.isArray(plan.assets)&&previousAssets.length){
         for(const item of plan.assets){
@@ -286,6 +303,7 @@ const server = http.createServer(async (req, res) => {
           sections:Array.isArray(plan.site?.sections)?plan.site.sections:[],
         },
         creativePlan:plan,
+        studioContext:plan.studioContext||currentV2.studioContext||null,
         briefingFacts:plan.briefingFacts||currentV2.briefingFacts||{colors:[],palette:[],explicitColors:false},
       };
       const saved=await updateProject(session.email,projectId,{briefing:briefingText,v2:nextV2});
