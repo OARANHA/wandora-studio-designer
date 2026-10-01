@@ -323,6 +323,61 @@ const server = http.createServer(async (req, res) => {
       const saved=await updateProject(session.email,projectId,{briefing:briefingText,v2:nextV2});
       return sendJson(res,200,{ok:true,plan:saved.v2?.creativePlan||plan,v2:saved.v2});
     }
+    if (path === '/api/v2/media/materialize-slot' && req.method === 'POST') {
+      const body=await readJson(req,80_000);
+      const projectId=String(body.projectId||'');
+      const slot=String(body.slot||'').trim().slice(0,100);
+      const instruction=String(body.instruction||'').replace(/\s+/g,' ').trim().slice(0,1200);
+      if(!slot) throw new HttpError(400,'Informe o slot visual que deve ser gerado.','media_slot_required');
+
+      const project=await getProject(session.email,projectId);
+      const plan=project.v2?.creativePlan&&typeof project.v2.creativePlan==='object'?structuredClone(project.v2.creativePlan):null;
+      if(!plan||!Array.isArray(plan.assets)) throw new HttpError(409,'Este projeto ainda não possui plano criativo.','creative_plan_missing');
+      const item=plan.assets.find(a=>a?.slot===slot);
+      if(!item) throw new HttpError(404,'Slot visual não encontrado no plano criativo.','creative_slot_missing');
+      if(item.kind!=='image') throw new HttpError(409,'Este slot não é uma imagem.','creative_slot_not_image');
+
+      const prompt=[String(item.prompt||'').trim(),instruction?('Explicit user request: '+instruction):''].filter(Boolean).join('. ').slice(0,4000);
+      if(prompt.length<4) throw new HttpError(409,'O slot não possui um prompt utilizável.','creative_prompt_empty');
+
+      const mediaRoute=await routeMediaWorker({
+        operation:'generate',prompt,slot,role:item.role,mediaMode:item.mediaMode,
+        archetype:plan.brand?.archetype,purpose:item.purpose,requestedWorker:item.workerHint,
+        styleModel:item.styleModel,hasReference:false,
+      },{useJev:body.useJev!==false});
+
+      const controller=new AbortController(); res.on('close',()=>controller.abort());
+      const media=await generateChutesImage({
+        prompt,negativePrompt:item.negativePrompt,width:item.width,height:item.height,
+        worker:mediaRoute.worker,styleModel:mediaRoute.styleModel||item.styleModel,signal:controller.signal,
+      });
+
+      const safeSlot=slot.replace(/[^a-z0-9_.-]+/gi,'-').replaceAll('.','-').slice(0,80);
+      const ext=media.contentType==='image/png'?'png':media.contentType==='image/webp'?'webp':'jpg';
+      const asset=await putAsset({
+        owner:session.email,projectId,role:item.role||'generated-image',
+        originalName:safeSlot+'-'+Date.now()+'.'+ext,contentType:media.contentType,buffer:media.body,
+      });
+
+      item.previousAssetId=item.assetId||null;
+      item.assetId=asset.id;
+      item.contentUrl='/api/projects/'+projectId+'/assets/'+asset.id+'/content';
+      item.status='attached';
+      item.error=null;
+      item.mediaWorker=media.worker||mediaRoute.worker||item.workerHint||null;
+      item.mediaModel=media.model||null;
+      item.styleModel=media.styleModel||mediaRoute.styleModel||item.styleModel||null;
+      item.routeReason=mediaRoute.reason||'materialize_slot';
+      item.lastInstruction=instruction||item.lastInstruction||null;
+      plan.status=plan.assets.some(a=>a.required!==false&&!a.assetId)?'partial':'ready';
+      plan.progress={total:plan.assets.length,ready:plan.assets.filter(a=>a.assetId).length,failed:plan.assets.filter(a=>a.status==='failed').length};
+
+      const nextV2={...(project.v2||{}),creativePlan:plan,kitStatus:plan.status==='ready'?'ready':'generating'};
+      const saved=await updateProject(session.email,projectId,{v2:nextV2});
+      return sendJson(res,201,{ok:true,slot,asset,plan:saved.v2?.creativePlan||plan,v2:saved.v2,route:{
+        provider:'chutes',worker:item.mediaWorker,model:item.mediaModel,styleModel:item.styleModel,reason:item.routeReason,
+      }});
+    }
     if (path === '/api/v2/media/revise-slot' && req.method === 'POST') {
       const body=await readJson(req,80_000);
       const projectId=String(body.projectId||'');
