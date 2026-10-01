@@ -16,22 +16,41 @@ export const config = Object.freeze({
   devPassword: process.env.STUDIO_DEV_PASSWORD || 'wandora-dev-only',
   jev: {
     baseUrl: (process.env.JEV_BASE_URL || 'https://api.typesafe.ai').replace(/\/$/, ''),
-    apiKey: process.env.JEV_API_KEY || '',
+    [REDACTED] || '',
     model: process.env.JEV_MODEL || 'jev-latest',
     timeoutMs: int('JEV_TIMEOUT_MS', 20_000, 1_000, 60_000),
   },
   nvidia: {
     baseUrl: (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, ''),
-    apiKey: process.env.NVIDIA_API_KEY || '',
+    [REDACTED] || '',
     model: process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b',
     timeoutMs: int('NVIDIA_TIMEOUT_MS', 120_000, 5_000, 180_000),
   },
   chutes: {
     baseUrl: (process.env.CHUTES_BASE_URL || 'https://llm.chutes.ai/v1').replace(/\/$/, ''),
-    apiKey: process.env.CHUTES_API_KEY || '',
+    [REDACTED] || '',
     timeoutMs: int('CHUTES_TIMEOUT_MS', 60_000, 5_000, 180_000),
-    imageUrl: (process.env.CHUTES_IMAGE_URL || 'https://vonkaiser-qwen-image-2512.chutes.ai/generate').trim(),
-    imageModel: (process.env.CHUTES_IMAGE_MODEL || 'Qwen/Qwen-Image-2512').trim(),
+
+    // Compatibilidade: CHUTES_IMAGE_URL / MODEL continuam aceitos como alias do worker de qualidade.
+    imageUrl: (process.env.CHUTES_IMAGE_URL || process.env.CHUTES_IMAGE_QUALITY_URL || 'https://vonkaiser-qwen-image-2512.chutes.ai/generate').trim(),
+    imageModel: (process.env.CHUTES_IMAGE_MODEL || process.env.CHUTES_IMAGE_QUALITY_MODEL || 'Qwen-Image-2512').trim(),
+
+    imageFastUrl: (process.env.CHUTES_IMAGE_FAST_URL || 'https://vonkaiser-z-image-turbo.chutes.ai/generate').trim(),
+    imageFastModel: (process.env.CHUTES_IMAGE_FAST_MODEL || 'z-image-turbo').trim(),
+
+    imageQualityUrl: (process.env.CHUTES_IMAGE_QUALITY_URL || 'https://vonkaiser-qwen-image-2512.chutes.ai/generate').trim(),
+    imageQualityModel: (process.env.CHUTES_IMAGE_QUALITY_MODEL || 'Qwen-Image-2512').trim(),
+
+    imageStyleUrl: (process.env.CHUTES_IMAGE_STYLE_URL || 'https://vonkaiser-imageclassic.chutes.ai/generate').trim(),
+    imageStyleModel: (process.env.CHUTES_IMAGE_STYLE_MODEL || 'imageclassic').trim(),
+    imageStyleDefault: (process.env.CHUTES_IMAGE_STYLE_DEFAULT || 'flux').trim().toLowerCase(),
+
+    imageEditUrl: (process.env.CHUTES_IMAGE_EDIT_URL || 'https://vonkaiser-qwen-image-edit-2511.chutes.ai/generate').trim(),
+    imageEditModel: (process.env.CHUTES_IMAGE_EDIT_MODEL || 'Qwen-Image-Edit-2511').trim(),
+
+    imageSegmentUrl: (process.env.CHUTES_IMAGE_SEGMENT_URL || 'https://score-test-sam3.chutes.ai/sam3/segment').trim(),
+    imageSegmentModel: (process.env.CHUTES_IMAGE_SEGMENT_MODEL || 'sam3').trim(),
+
     videoUrl: (process.env.CHUTES_VIDEO_URL || 'https://vonkaiser-ltx-23-video.chutes.ai/generate').trim(),
     videoModel: (process.env.CHUTES_VIDEO_MODEL || 'LTX-2.3-Video').trim(),
   },

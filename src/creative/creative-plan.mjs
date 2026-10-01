@@ -120,11 +120,19 @@ export function buildCreativePlanFromSignals({projectId='',briefing='',materials
   const assets=[];
   const addAsset=(slot,subject,mode='photography')=>{
     const size=dimensions(slot);
+    const workerHint=slot==='site.hero'
+      ?(mode==='illustration'?'image_style':'image_quality')
+      :slot.startsWith('stories.')?'image_fast':'image_quality';
+    const styleModel=mode==='illustration'?'ilustmix':null;
     assets.push({
       id:slot.replaceAll('.','-'),
       slot,
       kind:'image',
       role:slot.startsWith('stories.')?'story-background':slot==='site.hero'?'hero':'background',
+      purpose:slot==='site.hero'?'hero':slot.startsWith('stories.')?'story-background':'campaign-background',
+      mediaMode:mode,
+      workerHint,
+      styleModel,
       required:true,
       auto:true,
       status:'planned',

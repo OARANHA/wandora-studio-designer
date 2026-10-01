@@ -10,7 +10,8 @@ import { nvidiaChat, nvidiaStream } from './ai/nvidia.mjs';
 import { transcribeWav } from './ai/speech.mjs';
 import { listModels, modelTasks, routeModel } from './ai/model-registry.mjs';
 import { chutesChat, chutesStream } from './ai/chutes.mjs';
-import { generateChutesImage, generateChutesVideo } from './ai/chutes-media.mjs';
+import { chutesMediaCapabilities, editChutesImage, generateChutesImage, generateChutesVideo, segmentChutesImage } from './ai/chutes-media.mjs';
+import { routeMediaWorker } from './ai/media-router.mjs';
 import { buildWriterMessages, parseWriterFields, writerComplete, WRITER_MAX_TOKENS } from './ai/writer.mjs';
 import { QUESTION_GROUPS, GROUP_META, QUESTION_META, QUESTION_TOTAL } from './questions/catalog.mjs';
 import { createProject, createVersion, getProject, getVersion, listProjects, listVersions, projectLimits, updateProject } from './store/projects.mjs';
@@ -100,7 +101,7 @@ const server = http.createServer(async (req, res) => {
       const questions=Object.fromEntries(Object.entries(QUESTION_GROUPS).map(([group,items])=>[group,Object.fromEntries(Object.entries(items).map(([id,q])=>[id,{label:QUESTION_META[id]?.label||id,type:q.type,instructions:q.instructions||'',options:q.type==='choice'?q.criteria:q.type==='score'?q.criteria:null}]))]));
       return sendJson(res,200,{ok:true,groups:GROUP_META,questions,targets:TARGETS,total:QUESTION_TOTAL});
     }
-    if (path === '/api/config') return sendJson(res,200,{ok:true,domain:config.publicUrl,providers:{jev:{configured:!!config.jev.apiKey,base_url:config.jev.baseUrl,model:config.jev.model||null},nvidia:{configured:!!config.nvidia.apiKey,base_url:config.nvidia.baseUrl,model:config.nvidia.model},chutes:{configured:!!config.chutes.apiKey,base_url:config.chutes.baseUrl,image:!!config.chutes.imageUrl,video:!!config.chutes.videoUrl},speech:{configured:true,base_url:config.speech.baseUrl,model:config.speech.model,language:config.speech.language}},groups:Object.fromEntries(Object.entries(GROUP_META).map(([id,g])=>[id,g.count])),total:QUESTION_TOTAL,v2:true});
+    if (path === '/api/config') return sendJson(res,200,{ok:true,domain:config.publicUrl,providers:{jev:{configured:!!config.jev.apiKey,base_url:config.jev.baseUrl,model:config.jev.model||null},nvidia:{configured:!!config.nvidia.apiKey,base_url:config.nvidia.baseUrl,model:config.nvidia.model},chutes:{configured:!!config.chutes.apiKey,base_url:config.chutes.baseUrl,image:!!(config.chutes.imageFastUrl||config.chutes.imageQualityUrl||config.chutes.imageStyleUrl),video:!!config.chutes.videoUrl,media:chutesMediaCapabilities()},speech:{configured:true,base_url:config.speech.baseUrl,model:config.speech.model,language:config.speech.language}},groups:Object.fromEntries(Object.entries(GROUP_META).map(([id,g])=>[id,g.count])),total:QUESTION_TOTAL,v2:true});
     if (path === '/api/models' && req.method === 'GET') {
       const refresh=url.searchParams.get('refresh')==='1';
       const models=await listModels({refresh});
@@ -285,29 +286,45 @@ const server = http.createServer(async (req, res) => {
         preferredKey:String(project.modelRouting?.selections?.creative_plan||''),
         context:`${item.prompt||''}\nREVISÃO: ${instruction}`.slice(0,1800),
       });
-      const worker=routed.selected;
+      const director=routed.selected;
       const messages=[
         {role:'system',content:'You are a senior art director and image prompt editor. Rewrite the existing commercial image prompt in English, applying the requested revision while preserving brand style, composition purpose, aspect-ratio intent and negative-space needs. Do not add typography, logos or watermarks. Return only the final image-generation prompt, no markdown.'},
         {role:'user',content:`EXISTING PROMPT:\n${String(item.prompt||'').slice(0,3200)}\n\nREQUESTED REVISION:\n${instruction}`},
       ];
-      const promptResult=worker.provider==='chutes'
-        ? await chutesChat({messages,model:worker.id,temperature:0.35,top_p:0.9,max_tokens:420,stream:false})
-        : await nvidiaChat({messages,model:worker.id,temperature:0.35,top_p:0.9,max_tokens:420,stream:false});
+      const promptResult=director.provider==='chutes'
+        ? await chutesChat({messages,model:director.id,temperature:0.35,top_p:0.9,max_tokens:420,stream:false})
+        : await nvidiaChat({messages,model:director.id,temperature:0.35,top_p:0.9,max_tokens:420,stream:false});
       const revised=String(promptResult?.choices?.[0]?.message?.content||promptResult?.choices?.[0]?.text||'').replace(/^\s*[`"']+|[`"']+\s*$/g,'').trim();
       if(revised.length<20) throw new HttpError(502,'O diretor de arte não devolveu um prompt utilizável.','creative_prompt_empty');
 
       const controller=new AbortController(); res.on('close',()=>controller.abort());
-      const media=await generateChutesImage({
-        prompt:revised,
-        negativePrompt:item.negativePrompt,
-        width:item.width,
-        height:item.height,
-        signal:controller.signal,
-      });
+      const capabilities=chutesMediaCapabilities();
+      const regenerate=/\b(refaz(?:er)?\s+do\s+zero|nova\s+imagem|outra\s+imagem|gera(?:r)?\s+outra|substitu(?:i|ir)\s+completamente)\b/i.test(instruction);
+      let media,mediaRoute;
+      if(item.assetId&&capabilities.edit?.configured&&!regenerate){
+        const source=await readAsset(session.email,projectId,item.assetId);
+        media=await editChutesImage({
+          prompt:revised,images:[source.body],negativePrompt:item.negativePrompt,
+          width:item.width,height:item.height,signal:controller.signal,
+        });
+        mediaRoute={worker:'image_edit',styleModel:null,reason:'existing_asset_edit',source:'automatic'};
+      }else{
+        mediaRoute=await routeMediaWorker({
+          operation:'generate',prompt:revised,slot,role:item.role,mediaMode:item.mediaMode,
+          archetype:plan.brand?.archetype,purpose:item.purpose,workerHint:item.workerHint,
+          styleModel:item.styleModel,hasReference:false,
+        },{useJev:true});
+        media=await generateChutesImage({
+          prompt:revised,negativePrompt:item.negativePrompt,width:item.width,height:item.height,
+          worker:mediaRoute.worker,styleModel:mediaRoute.styleModel,signal:controller.signal,
+        });
+      }
+
       const safeSlot=slot.replace(/[^a-z0-9_.-]+/gi,'-').replaceAll('.','-').slice(0,80);
+      const ext=media.contentType==='image/png'?'png':'jpg';
       const asset=await putAsset({
         owner:session.email,projectId,role:item.role||'generated-image',
-        originalName:`${safeSlot}-v${Date.now()}.png`,contentType:media.contentType,buffer:media.body,
+        originalName:`${safeSlot}-v${Date.now()}.${ext}`,contentType:media.contentType,buffer:media.body,
       });
       item.previousAssetId=item.assetId||null;
       item.assetId=asset.id;
@@ -315,6 +332,10 @@ const server = http.createServer(async (req, res) => {
       item.prompt=revised.slice(0,2200);
       item.status='attached';
       item.error=null;
+      item.mediaWorker=media.worker||mediaRoute.worker;
+      item.mediaModel=media.model||null;
+      item.styleModel=media.styleModel||mediaRoute.styleModel||item.styleModel||null;
+      item.routeReason=mediaRoute.reason||null;
       item.revisionCount=Math.min(999,(Number(item.revisionCount)||0)+1);
       item.lastInstruction=instruction;
       plan.status=plan.assets.some(a=>a.required!==false&&!a.assetId)?'partial':'ready';
@@ -325,16 +346,65 @@ const server = http.createServer(async (req, res) => {
       };
       const nextV2={...(project.v2||{}),creativePlan:plan,kitStatus:plan.status==='ready'?'ready':'generating'};
       const saved=await updateProject(session.email,projectId,{v2:nextV2});
-      return sendJson(res,201,{ok:true,slot,asset,plan:saved.v2?.creativePlan||plan,route:{provider:worker.provider,model:worker.id,reason:routed.reason}});
+      return sendJson(res,201,{ok:true,slot,asset,plan:saved.v2?.creativePlan||plan,route:{
+        provider:'chutes',worker:item.mediaWorker,model:item.mediaModel,styleModel:item.styleModel,
+        reason:item.routeReason,directorModel:director.id,directorProvider:director.provider,
+      }});
     }
     if (path === '/api/v2/media/image' && req.method === 'POST') {
-      const body=await readJson(req,50_000);
+      const body=await readJson(req,80_000);
+      const projectId=String(body.projectId||'');
+      const project=await getProject(session.email,projectId);
+      const mediaRoute=await routeMediaWorker({
+        operation:'generate',prompt:body.prompt,slot:body.slot,role:body.role,mediaMode:body.mediaMode,
+        archetype:body.archetype||project.v2?.creativePlan?.brand?.archetype,purpose:body.purpose,
+        requestedWorker:body.worker,workerHint:body.workerHint,styleModel:body.styleModel,quality:body.quality,
+        hasReference:false,
+      },{useJev:body.useJev!==false});
+      const controller=new AbortController(); res.on('close',()=>controller.abort());
+      const media=await generateChutesImage({
+        prompt:body.prompt,negativePrompt:body.negativePrompt,width:body.width,height:body.height,
+        worker:mediaRoute.worker,styleModel:mediaRoute.styleModel,signal:controller.signal,
+      });
+      const ext=media.contentType==='image/png'?'png':'jpg';
+      const asset=await putAsset({
+        owner:session.email,projectId,role:String(body.role||'generated-image').slice(0,50),
+        originalName:`imagem-ia-${Date.now()}.${ext}`,contentType:media.contentType,buffer:media.body,
+      });
+      return sendJson(res,201,{ok:true,asset,provider:'chutes',route:{
+        worker:media.worker||mediaRoute.worker,model:media.model||null,styleModel:media.styleModel||mediaRoute.styleModel||null,
+        reason:mediaRoute.reason,source:mediaRoute.source,jevModel:mediaRoute.model||null,
+      }});
+    }
+    if (path === '/api/v2/media/edit' && req.method === 'POST') {
+      const body=await readJson(req,80_000);
       const projectId=String(body.projectId||'');
       await getProject(session.email,projectId);
+      const ids=[body.assetId,...(Array.isArray(body.referenceAssetIds)?body.referenceAssetIds:[])].map(v=>String(v||'')).filter(Boolean);
+      const unique=[...new Set(ids)].slice(0,3);
+      if(!unique.length) throw new HttpError(400,'Informe a imagem que deseja editar.','image_reference_required');
+      const refs=[];
+      for(const id of unique) refs.push((await readAsset(session.email,projectId,id)).body);
       const controller=new AbortController(); res.on('close',()=>controller.abort());
-      const media=await generateChutesImage({prompt:body.prompt,negativePrompt:body.negativePrompt,width:body.width,height:body.height,signal:controller.signal});
-      const asset=await putAsset({owner:session.email,projectId,role:'generated-image',originalName:`imagem-ia-${Date.now()}.png`,contentType:media.contentType,buffer:media.body});
-      return sendJson(res,201,{ok:true,asset,provider:'chutes'});
+      const media=await editChutesImage({
+        prompt:body.prompt,images:refs,negativePrompt:body.negativePrompt,width:body.width,height:body.height,
+        trueCfgScale:body.trueCfgScale,steps:body.steps,signal:controller.signal,
+      });
+      const ext=media.contentType==='image/png'?'png':'jpg';
+      const asset=await putAsset({
+        owner:session.email,projectId,role:'generated-image-edit',
+        originalName:`imagem-editada-${Date.now()}.${ext}`,contentType:media.contentType,buffer:media.body,
+      });
+      return sendJson(res,201,{ok:true,asset,provider:'chutes',route:{worker:media.worker,model:media.model,reason:'explicit_image_edit'}});
+    }
+    if (path === '/api/v2/media/segment' && req.method === 'POST') {
+      const body=await readJson(req,40_000);
+      const projectId=String(body.projectId||'');
+      await getProject(session.email,projectId);
+      const source=await readAsset(session.email,projectId,String(body.assetId||''));
+      const controller=new AbortController(); res.on('close',()=>controller.abort());
+      const result=await segmentChutesImage({image:source.body,prompt:body.prompt,signal:controller.signal});
+      return sendJson(res,200,{ok:true,provider:'chutes',route:{worker:result.worker,model:result.model,reason:'explicit_object_segmentation'},result:result.data});
     }
     if (path === '/api/v2/media/video' && req.method === 'POST') {
       const body=await readJson(req,50_000);
@@ -343,7 +413,7 @@ const server = http.createServer(async (req, res) => {
       const controller=new AbortController(); res.on('close',()=>controller.abort());
       const media=await generateChutesVideo({prompt:body.prompt,resolution:body.resolution,frames:body.frames,fps:body.fps,signal:controller.signal});
       const asset=await putAsset({owner:session.email,projectId,role:'generated-video',originalName:`video-ia-${Date.now()}.mp4`,contentType:media.contentType,buffer:media.body});
-      return sendJson(res,201,{ok:true,asset,provider:'chutes'});
+      return sendJson(res,201,{ok:true,asset,provider:'chutes',route:{worker:media.worker,model:media.model,reason:'video_generation'}});
     }
     if (path === '/api/transcribe' && req.method === 'POST') {
       const type=String(req.headers['content-type']||'').split(';')[0].trim().toLowerCase();

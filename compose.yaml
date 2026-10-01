@@ -26,8 +26,34 @@ services:
       CHUTES_BASE_URL: ${CHUTES_BASE_URL:-https://llm.chutes.ai/v1}
       CHUTES_API_KEY: ${CHUTES_API_KEY:-}
       CHUTES_TIMEOUT_MS: ${CHUTES_TIMEOUT_MS:-60000}
+      # Compatibilidade com a configuração antiga (alias do worker de qualidade)
       CHUTES_IMAGE_URL: ${CHUTES_IMAGE_URL:-}
       CHUTES_IMAGE_MODEL: ${CHUTES_IMAGE_MODEL:-}
+      CHUTES_IMAGE_FAST_URL: ${CHUTES_IMAGE_FAST_URL:-https://vonkaiser-z-image-turbo.chutes.ai/generate}
+      CHUTES_IMAGE_FAST_MODEL: ${CHUTES_IMAGE_FAST_MODEL:-z-image-turbo}
+      CHUTES_IMAGE_QUALITY_URL: ${CHUTES_IMAGE_QUALITY_URL:-https://vonkaiser-qwen-image-2512.chutes.ai/generate}
+      CHUTES_IMAGE_QUALITY_MODEL: ${CHUTES_IMAGE_QUALITY_MODEL:-Qwen-Image-2512}
+      CHUTES_IMAGE_STYLE_URL: ${CHUTES_IMAGE_STYLE_URL:-https://vonkaiser-imageclassic.chutes.ai/generate}
+      CHUTES_IMAGE_STYLE_MODEL: ${CHUTES_IMAGE_STYLE_MODEL:-imageclassic}
+      CHUTES_IMAGE_STYLE_DEFAULT: ${CHUTES_IMAGE_STYLE_DEFAULT:-flux}
+      CHUTES_IMAGE_EDIT_URL: ${CHUTES_IMAGE_EDIT_URL:-https://vonkaiser-qwen-image-edit-2511.chutes.ai/generate}
+      CHUTES_IMAGE_EDIT_MODEL: ${CHUTES_IMAGE_EDIT_MODEL:-Qwen-Image-Edit-2511}
+      CHUTES_IMAGE_SEGMENT_URL: ${CHUTES_IMAGE_SEGMENT_URL:-https://score-test-sam3.chutes.ai/sam3/segment}
+      CHUTES_IMAGE_SEGMENT_MODEL: ${CHUTES_IMAGE_SEGMENT_MODEL:-sam3}
+
+      # Media Router: geração rápida, geração premium, estilos, edição e segmentação
+      CHUTES_IMAGE_FAST_URL: ${CHUTES_IMAGE_FAST_URL:-https://vonkaiser-z-image-turbo.chutes.ai/generate}
+      CHUTES_IMAGE_FAST_MODEL: ${CHUTES_IMAGE_FAST_MODEL:-z-image-turbo}
+      CHUTES_IMAGE_QUALITY_URL: ${CHUTES_IMAGE_QUALITY_URL:-https://vonkaiser-qwen-image-2512.chutes.ai/generate}
+      CHUTES_IMAGE_QUALITY_MODEL: ${CHUTES_IMAGE_QUALITY_MODEL:-Qwen-Image-2512}
+      CHUTES_IMAGE_STYLE_URL: ${CHUTES_IMAGE_STYLE_URL:-https://vonkaiser-imageclassic.chutes.ai/generate}
+      CHUTES_IMAGE_STYLE_MODEL: ${CHUTES_IMAGE_STYLE_MODEL:-imageclassic}
+      CHUTES_IMAGE_STYLE_DEFAULT: ${CHUTES_IMAGE_STYLE_DEFAULT:-flux}
+      CHUTES_IMAGE_EDIT_URL: ${CHUTES_IMAGE_EDIT_URL:-https://vonkaiser-qwen-image-edit-2511.chutes.ai/generate}
+      CHUTES_IMAGE_EDIT_MODEL: ${CHUTES_IMAGE_EDIT_MODEL:-Qwen-Image-Edit-2511}
+      CHUTES_IMAGE_SEGMENT_URL: ${CHUTES_IMAGE_SEGMENT_URL:-https://score-test-sam3.chutes.ai/sam3/segment}
+      CHUTES_IMAGE_SEGMENT_MODEL: ${CHUTES_IMAGE_SEGMENT_MODEL:-sam3}
+
       CHUTES_VIDEO_URL: ${CHUTES_VIDEO_URL:-}
       CHUTES_VIDEO_MODEL: ${CHUTES_VIDEO_MODEL:-}
       STT_BASE_URL: ${STT_BASE_URL:-http://studio-asr:8000}

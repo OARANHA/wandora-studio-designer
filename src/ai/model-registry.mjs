@@ -70,13 +70,30 @@ async function chutesModels(){
 }
 function mediaModels(){
   const out=[];
-  if(config.chutes.imageUrl)out.push(providerModel({
-    provider:'chutes-media',id:config.chutes.imageModel||'image-generator',label:config.chutes.imageModel||'Chutes Image',
-    input:['text','image'],output:['image'],strengths:['image'],speed:'medium',cost:'medium',configured:!!config.chutes.apiKey,source:'runtime',
+  const configured=!!config.chutes.apiKey;
+  if(config.chutes.imageFastUrl)out.push(providerModel({
+    provider:'chutes-media',id:config.chutes.imageFastModel||'z-image-turbo',label:'Z-Image Turbo · rápido',
+    input:['text'],output:['image'],strengths:['image','speed'],speed:'fast',cost:'low',configured,source:'runtime',
+  }));
+  if(config.chutes.imageQualityUrl)out.push(providerModel({
+    provider:'chutes-media',id:config.chutes.imageQualityModel||'Qwen-Image-2512',label:'Qwen Image 2512 · qualidade',
+    input:['text'],output:['image'],strengths:['image','quality'],speed:'medium',cost:'medium',configured,source:'runtime',
+  }));
+  if(config.chutes.imageStyleUrl)out.push(providerModel({
+    provider:'chutes-media',id:config.chutes.imageStyleModel||'imageclassic',label:'Imageclassic · estilos',
+    input:['text'],output:['image'],strengths:['image','creativity'],speed:'medium',cost:'medium',configured,source:'runtime',
+  }));
+  if(config.chutes.imageEditUrl)out.push(providerModel({
+    provider:'chutes-media',id:config.chutes.imageEditModel||'Qwen-Image-Edit-2511',label:'Qwen Image Edit 2511 · edição',
+    input:['text','image'],output:['image_edit'],strengths:['image_edit'],speed:'medium',cost:'medium',configured,source:'runtime',
+  }));
+  if(config.chutes.imageSegmentUrl)out.push(providerModel({
+    provider:'chutes-media',id:config.chutes.imageSegmentModel||'sam3',label:'SAM3 · segmentação',
+    input:['text','image'],output:['segmentation'],strengths:['segmentation'],speed:'medium',cost:'medium',configured,source:'runtime',
   }));
   if(config.chutes.videoUrl)out.push(providerModel({
     provider:'chutes-media',id:config.chutes.videoModel||'video-generator',label:config.chutes.videoModel||'Chutes Video',
-    input:['text','image'],output:['video'],strengths:['video'],speed:'slow',cost:'high',configured:!!config.chutes.apiKey,source:'runtime',
+    input:['text','image'],output:['video'],strengths:['video'],speed:'slow',cost:'high',configured,source:'runtime',
   }));
   return out;
 }

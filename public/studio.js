@@ -98,14 +98,15 @@ async function loadConfig(){
     const c=await json('/api/config');
     nvidiaReady=!!c.providers.nvidia.configured;
     chutesReady=!!c.providers.chutes?.configured;
-    chutesImageReady=chutesReady&&!!c.providers.chutes?.image;
-    chutesVideoReady=chutesReady&&!!c.providers.chutes?.video;
+    const mediaCaps=c.providers.chutes?.media||{};
+    chutesImageReady=chutesReady&&!!(mediaCaps.fast?.configured||mediaCaps.quality?.configured||mediaCaps.style?.configured||c.providers.chutes?.image);
+    chutesVideoReady=chutesReady&&!!(mediaCaps.video?.configured||c.providers.chutes?.video);
     writerReady=nvidiaReady||chutesReady;
     providers.textContent=`JEV ${c.providers.jev.configured?'●':'○'} · NVIDIA ${nvidiaReady?'●':'○'} · CHUTES ${chutesReady?'●':'○'} · VOZ ${c.providers.speech?.configured?'●':'○'} · V2`;
     providers.classList.toggle('ready',c.providers.jev.configured&&writerReady);
     generateCopyBtn.title=writerReady?'Writer roteado pelo Jev':'Configure NVIDIA_API_KEY ou CHUTES_API_KEY';
     generateImageBtn.disabled=!chutesImageReady; generateVideoBtn.disabled=!chutesVideoReady;
-    generateImageBtn.title=chutesImageReady?'Gerar imagem no Chutes':'Configure CHUTES_API_KEY e CHUTES_IMAGE_URL';
+    generateImageBtn.title=chutesImageReady?'Gerar imagem com roteamento Chutes (Z-Image / Qwen / Imageclassic)':'Configure CHUTES_API_KEY e os workers de imagem';
     generateVideoBtn.title=chutesVideoReady?'Gerar vídeo curto no Chutes':'Configure CHUTES_API_KEY e CHUTES_VIDEO_URL';
     refreshProjectButtons();
   }catch{providers.textContent='IA indisponível';nvidiaReady=false;chutesReady=false;chutesImageReady=false;chutesVideoReady=false;writerReady=false;generateImageBtn.disabled=true;generateVideoBtn.disabled=true;refreshProjectButtons();}
@@ -631,8 +632,9 @@ async function generateMedia(kind){
   try{
     const d=await json(`/api/v2/media/${kind}`,{method:'POST',body:JSON.stringify({projectId:activeProject.id,prompt})});
     await loadAssets();
-    mediaStatus.textContent=`✓ ${kind==='image'?'Imagem':'Vídeo'} salvo nos ativos do projeto · ${d.asset.name}`;
-    status.textContent=`Mídia IA criada e anexada ao projeto.`;
+    const routedLabel=d.route?.model||d.route?.worker||'Chutes';
+    mediaStatus.textContent=`✓ ${kind==='image'?'Imagem':'Vídeo'} salvo nos ativos · ${routedLabel}`;
+    status.textContent=`Mídia IA criada por ${routedLabel} e anexada ao projeto.`;
   }catch(e){
     mediaStatus.textContent=`⚠ ${e.message}`;
   }finally{
@@ -662,10 +664,26 @@ async function materializeCreativeAssets(plan){
     kitStatus.textContent=`4/5 · Chutes criando mídia ${i+1}/${queue.length} · ${item.slot}`;
     try{
       const d=await json('/api/v2/media/image',{method:'POST',body:JSON.stringify({
-        projectId:activeProject.id,prompt:item.prompt,negativePrompt:item.negativePrompt,width:item.width,height:item.height,
+        projectId:activeProject.id,
+        prompt:item.prompt,
+        negativePrompt:item.negativePrompt,
+        width:item.width,
+        height:item.height,
+        slot:item.slot,
+        role:item.role,
+        purpose:item.purpose,
+        mediaMode:item.mediaMode,
+        archetype:plan?.brand?.archetype,
+        workerHint:item.workerHint,
+        styleModel:item.styleModel,
+        useJev:true,
       })});
       item.assetId=d.asset.id;
       item.contentUrl=`/api/projects/${activeProject.id}/assets/${d.asset.id}/content`;
+      item.mediaWorker=d.route?.worker||item.workerHint||null;
+      item.mediaModel=d.route?.model||null;
+      item.styleModel=d.route?.styleModel||item.styleModel||null;
+      item.routeReason=d.route?.reason||null;
       item.status='attached';done++;
     }catch(e){
       item.status='failed';item.error=String(e.message||'Falha ao gerar mídia').slice(0,280);failed++;
