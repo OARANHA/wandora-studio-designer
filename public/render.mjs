@@ -86,7 +86,7 @@ function choice(a){ return a?.choice ?? null; }
 function score(a){ const n=Number(a?.score); return Number.isFinite(n)?n:null; }
 function labelKey(v){ return String(v||'').replaceAll('_',' ').replace(/\b\w/g,m=>m.toUpperCase()); }
 function palette(decisions,v2={}){
-  const explicit=v2?.briefingFacts?.palette||v2?.creativePlan?.brand?.palette;
+  const explicit=v2?.studioContext?.briefingFacts?.palette||v2?.briefingFacts?.palette||v2?.creativePlan?.brand?.palette;
   if(Array.isArray(explicit)&&explicit.length>=5&&explicit.every(x=>/^#[0-9a-f]{6}$/i.test(String(x||'')))){
     return {key:'briefing',colors:explicit.slice(0,5)};
   }
@@ -94,6 +94,8 @@ function palette(decisions,v2={}){
   return {key:key||'mono', colors:PALETTES[key]||PALETTES.mono};
 }
 function brandFallback(decisions,v2={}){
+  const canonical=String(v2?.studioContext?.copyFallback?.brand?.name||'').trim();
+  if(canonical)return canonical;
   const planned=String(v2?.creativePlan?.business?.label||'').split('/')[0].trim();
   if(planned)return planned;
   const seg=choice(decisions?.entender?.seg);
@@ -103,6 +105,11 @@ function textCopy(copy,path,fallback){
   let cur=copy;
   for(const k of path.split('.')) cur=cur?.[k];
   return typeof cur==='string' && cur.trim()?cur.trim():fallback;
+}
+function contextCopy(v2,path,fallback){
+  let cur=v2?.studioContext?.copyFallback;
+  for(const k of path.split('.'))cur=cur?.[k];
+  return typeof cur==='string'&&cur.trim()?cur.trim():fallback;
 }
 function node(tag,cls,text){
   const n=document.createElement(tag); if(cls)n.className=cls; if(text!==undefined)n.textContent=text; return n;
@@ -134,7 +141,7 @@ export function renderBrand(decisions,copy={},v2={}){
   const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const card=node('div','brand-card'); const top=node('div','brand-lockup');
   const mark=node('div',`brand-mark brand-mark--${choice(d.forma)||'circulo'}`,(choice(d.icone)||'W').slice(0,1).toUpperCase());
-  const naming=node('div','brand-name'); naming.append(node('strong','',textCopy(copy,'brand.name',brandFallback(decisions,v2))),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(d.slogan)]||labelKey(choice(d.slogan)||'identidade viva'))));
+  const naming=node('div','brand-name'); naming.append(node('strong','',textCopy(copy,'brand.name',contextCopy(v2,'brand.name',brandFallback(decisions,v2)))),node('span','',textCopy(copy,'brand.slogan',contextCopy(v2,'brand.slogan',SLOGAN[choice(d.slogan)]||labelKey(choice(d.slogan)||'identidade viva')))));
   top.append(mark,naming);
   const swatches=node('div','brand-swatches'); colors.forEach(c=>{const s=node('i');s.style.background=c;s.title=c;swatches.append(s);});
   const meta=node('div','brand-meta'); meta.append(node('span','',`logo · ${labelKey(choice(d.estilo)||'clássico')}`),node('span','',`fonte · ${labelKey(choice(d.fonte)||'editorial')}`));
@@ -151,9 +158,9 @@ export function renderSite(decisions,copy={},v2={}){
   shell.classList.add(`site-v2--${String(heroVariant).replaceAll('_','-')}`);
   if(structure.hero?.enabled!==false){
     const hero=node('div','site-hero-art'); const copyBox=node('div','site-copy');
-    const title=textCopy(copy,'site.headline',TITLE[choice(d.titulo)]||'Uma marca feita para ser lembrada.');
-    copyBox.append(node('small','',labelKey(choice(decisions?.entender?.seg)||'negócio')),node('h2','',title),node('p','',textCopy(copy,'site.subheadline','Estratégia, personalidade e uma experiência visual coerente do primeiro contato à conversão.')));
-    const button=node('button','site-cta',textCopy(copy,'site.cta',CTA[choice(d.cta)]||'Conhecer agora')); button.type='button';
+    const title=textCopy(copy,'site.headline',contextCopy(v2,'site.headline',TITLE[choice(d.titulo)]||'Uma marca feita para ser lembrada.'));
+    copyBox.append(node('small','',labelKey(choice(decisions?.entender?.seg)||'negócio')),node('h2','',title),node('p','',textCopy(copy,'site.subheadline',contextCopy(v2,'site.subheadline','Estratégia, personalidade e uma experiência visual coerente do primeiro contato à conversão.'))));
+    const button=node('button','site-cta',textCopy(copy,'site.cta',contextCopy(v2,'site.cta',CTA[choice(d.cta)]||'Conhecer agora'))); button.type='button';
     copyBox.append(button);
     const art=node('div',`site-object site-object--${choice(d.img)||'flat'}`);
     const heroSlot=v2?.creativePlan?.site?.hero?.assetSlot||'site.hero';
@@ -178,9 +185,9 @@ export function renderPosts(decisions,copy={},v2={}){
   const d=decisions?.posts; if(!d){empty(root,'CARROSSÉIS','3 histórias em 18 lâminas');return;}
   const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const titles=[
-    textCopy(copy,'posts.presentation.title',labelKey(choice(d.p1_hook)||'Conheça a marca')),
-    textCopy(copy,'posts.sales.title',labelKey(choice(d.p2_hook)||'Oferta em destaque')),
-    textCopy(copy,'posts.relationship.title',labelKey(choice(d.p3_hook)||'Salve este conteúdo')),
+    textCopy(copy,'posts.presentation.title',contextCopy(v2,'posts.presentation.title',labelKey(choice(d.p1_hook)||'Conheça a marca'))),
+    textCopy(copy,'posts.sales.title',contextCopy(v2,'posts.sales.title',labelKey(choice(d.p2_hook)||'Oferta em destaque'))),
+    textCopy(copy,'posts.relationship.title',contextCopy(v2,'posts.relationship.title',labelKey(choice(d.p3_hook)||'Salve este conteúdo'))),
   ];
   ['APRESENTAÇÃO','VENDA','RELACIONAMENTO'].forEach((kind,i)=>{
     const c=node('div',`post-card post-card--${i+1}`);
@@ -195,7 +202,7 @@ export function renderEmail(decisions,copy={},v2={}){
   const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const mail=node('div','email-art'); const bar=node('div','email-bar'); bar.append(node('b','',textCopy(copy,'brand.name',brandFallback(decisions,v2))),node('span','',labelKey(choice(d.em_tipo)||'newsletter')));
   const body=node('div','email-body');
-  body.append(node('small','','ASSUNTO'),node('strong','',textCopy(copy,'email.subject',labelKey(choice(d.em_assunto)||'Uma novidade para você'))),node('p','',textCopy(copy,'email.preview','Uma mensagem curta, clara e consistente com a nova identidade da marca.')));
+  body.append(node('small','','ASSUNTO'),node('strong','',textCopy(copy,'email.subject',contextCopy(v2,'email.subject',labelKey(choice(d.em_assunto)||'Uma novidade para você')))),node('p','',textCopy(copy,'email.preview',contextCopy(v2,'email.preview','Uma mensagem curta, clara e consistente com a nova identidade da marca.'))));
   const b=node('button','email-cta',textCopy(copy,'email.cta',CTA[choice(d.em_cta)]||'Saiba mais')); b.type='button'; body.append(b);
   const sig=node('div','email-signature'); sig.append(node('i','', (textCopy(copy,'brand.name',brandFallback(decisions,v2))).slice(0,1)),node('span','',textCopy(copy,'email.signature','Equipe · relacionamento e atendimento')));
   mail.append(bar,body,sig); root.append(mail);
@@ -206,9 +213,9 @@ export function renderStories(decisions,copy={},v2={}){
   const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const planned=Array.isArray(v2?.creativePlan?.stories?.items)?v2.creativePlan.stories.items:[];
   const defaults=[
-    {type:'presentation',headline:textCopy(copy,'posts.presentation.title','Conheça a marca'),cta:'Toque para conhecer',assetSlot:'stories.01'},
-    {type:'offer',headline:textCopy(copy,'posts.sales.title','Oferta em destaque'),cta:'Arraste para saber mais',assetSlot:'stories.02'},
-    {type:'relationship',headline:textCopy(copy,'posts.relationship.title','Fale com a gente'),cta:'Responda este story',assetSlot:'stories.03'},
+    {type:'presentation',headline:textCopy(copy,'posts.presentation.title',contextCopy(v2,'posts.presentation.title','Conheça a marca')),cta:'Toque para conhecer',assetSlot:'stories.01'},
+    {type:'offer',headline:textCopy(copy,'posts.sales.title',contextCopy(v2,'posts.sales.title','Oferta em destaque')),cta:contextCopy(v2,'site.cta','Arraste para saber mais'),assetSlot:'stories.02'},
+    {type:'relationship',headline:textCopy(copy,'posts.relationship.title',contextCopy(v2,'posts.relationship.title','Fale com a gente')),cta:'Responda este story',assetSlot:'stories.03'},
   ];
   const labels={presentation:'APRESENTAÇÃO',offer:'VENDA',authority:'AUTORIDADE',tip:'DICA',testimonial:'PROVA',cta:'CHAMADA',relationship:'RELACIONAMENTO',product:'PRODUTO'};
   defaults.map((fallback,i)=>({...fallback,...(planned[i]||{}),headline:(planned[i]?.headline||fallback.headline)})).forEach((item,i)=>{
@@ -227,7 +234,7 @@ export function renderManual(decisions,copy={},v2={}){
   const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const shell=node('div','manual-art');
   const cover=node('div','manual-cover');
-  cover.append(node('small','','MANUAL DE MARCA'),node('strong','',textCopy(copy,'brand.name','NOVA MARCA')),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(d.slogan)]||'Identidade que trabalha como sistema.')));
+  cover.append(node('small','','MANUAL DE MARCA'),node('strong','',textCopy(copy,'brand.name',contextCopy(v2,'brand.name',brandFallback(decisions,v2)))),node('span','',textCopy(copy,'brand.slogan',contextCopy(v2,'brand.slogan',SLOGAN[choice(d.slogan)]||'Identidade que trabalha como sistema.'))));
   const guide=node('div','manual-guide');
   const swatches=node('div','manual-swatches');colors.forEach(c=>{const i=node('i');i.style.background=c;i.title=c;swatches.append(i);});
   const rules=node('ul','manual-rules');
@@ -245,8 +252,8 @@ export function renderAds(decisions,copy={},v2={}){
   const reuse=v2?.creativePlan?.ads?.reuseSlot||'site.hero';
   const bg=creativeAssetUrl(v2,reuse)||creativeAssetUrl(v2,'stories.01');
   if(bg){ad.classList.add('ad-art--media');ad.style.backgroundImage=`linear-gradient(135deg,rgba(7,8,7,.2),rgba(7,8,7,.88)),url("${bg}")`;ad.style.backgroundSize='cover';ad.style.backgroundPosition='center';}
-  ad.append(node('small','',labelKey(choice(d.ad_conceito)||'campanha')),node('strong','',textCopy(copy,'ads.headline',labelKey(choice(d.ad_titulo)||'Uma oferta para você'))),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(decisions?.marca?.slogan)]||'Marca, produto e chamada em sintonia.')));
-  const b=node('button','ad-cta',textCopy(copy,'ads.cta',CTA[choice(d.ad_cta)]||'Saiba mais'));b.type='button';ad.append(b);root.append(ad);
+  ad.append(node('small','',labelKey(choice(d.ad_conceito)||'campanha')),node('strong','',textCopy(copy,'ads.headline',contextCopy(v2,'ads.headline',labelKey(choice(d.ad_titulo)||'Uma oferta para você')))),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(decisions?.marca?.slogan)]||'Marca, produto e chamada em sintonia.')));
+  const b=node('button','ad-cta',textCopy(copy,'ads.cta',contextCopy(v2,'ads.cta',CTA[choice(d.ad_cta)]||'Saiba mais')));b.type='button';ad.append(b);root.append(ad);
 }
 export function renderAll(decisions={},copy={},v2={}){
   renderBrand(decisions,copy,v2); renderSite(decisions,copy,v2); renderPosts(decisions,copy,v2); renderStories(decisions,copy,v2); renderEmail(decisions,copy,v2); renderAds(decisions,copy,v2); renderManual(decisions,copy,v2);
