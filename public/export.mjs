@@ -77,11 +77,16 @@ export function buildSiteHtml({project,decisions={},copy={},v2={}}={}){
   const galleryAssets=['stories.01','stories.02','stories.03'].map(slot=>creativeAssetUrl(project,v2,slot)).filter(Boolean);
   const structure=v2?.siteStructure||{hero:{enabled:true,variant:'split'},sections:[]};
   const contextHero={ 'hero-full-background':'full_background','hero-split-image':'split','hero-editorial':'editorial','hero-illustration':'illustration','hero-product':'product','hero-video':'video' }[siteCtx?.heroComposition]||'';
-  const heroEnabled=structure.hero?.enabled!==false, heroVariant=clean(v2?.creativePlan?structure.hero?.variant:(contextHero||structure.hero?.variant),'split');
+  const plannedDeliverables=Array.isArray(v2?.creativePlan?.deliverables)?v2.creativePlan.deliverables:[];
+  const storyOnlyPlan=!!v2?.creativePlan && !plannedDeliverables.includes('site');
+  const heroEnabled=(storyOnlyPlan&&siteCtx?.heroDecision)?true:structure.hero?.enabled!==false;
+  const heroVariant=clean(storyOnlyPlan?(contextHero||structure.hero?.variant):(structure.hero?.variant||contextHero),'split');
   const heroSlot=v2?.creativePlan?.site?.hero?.assetSlot||'site.hero';
   const heroImageUrl=creativeAssetUrl(project,v2,heroSlot);
   const contextSections=Array.isArray(siteCtx?.sections)?siteCtx.sections:[];
   const chosen=(structure.sections||[]).length?structure.sections:contextSections.length?contextSections:['benefits','proof','features','cta'];
+  const navLabels={benefits:'Benefícios',proof:'Resultados',features:content?.itemsTitle||'Serviços',process:'Como funciona',gallery:'Galeria',pricing:'Planos',faq:'FAQ',about:'Sobre',numbers:'Números',team:'Equipe',location:'Localização',lead:'Contato',cta:'Contato'};
+  const navItems=[...new Set(chosen.map(id=>navLabels[id]).filter(Boolean))].slice(0,4);
   const items=Array.isArray(content?.items)?content.items:[];
   const benefits=Array.isArray(content?.benefits)?content.benefits:[];
   const faqItems=Array.isArray(content?.faq)?content.faq:[];
@@ -121,7 +126,7 @@ export function buildSiteHtml({project,decisions={},copy={},v2={}}={}){
     if(id==='location')return `<section><div class="wrap"><small>VENHA CONHECER</small><h2>Visite ${esc(name)}.</h2><p class="lead-copy">Fale com a equipe para consultar endereço, horários e a melhor forma de chegar.</p><a class="cta" href="#contato">${esc(siteCta)}</a></div></section>`;
     if(id==='lead')return `<section id="contato"><div class="wrap"><small>CONTATO</small><h2>Pronto para o próximo passo?</h2><p>${esc(sub)}</p><a class="cta" href="#">${esc(siteCta)}</a></div></section>`;
     if(id==='cta')return `<section class="band" id="contato"><div class="wrap"><small>PRÓXIMO PASSO</small><h2>${esc(slogan(copy,v2))}</h2><p>${esc(sub)}</p><a class="cta cta-light" href="#">${esc(siteCta)}</a></div></section>`;
-    if(id==='footer')return `<section class="prefooter"><div class="wrap"><strong>${esc(name)}</strong><span>SOBRE · SERVIÇOS · CONTATO</span></div></section>`;
+    if(id==='footer')return `<section class="prefooter"><div class="wrap"><strong>${esc(name)}</strong><span>${esc((navItems.length?navItems:['Sobre','Serviços','Contato']).join(' · '))}</span></div></section>`;
     return '';
   };
   const heroMedia=heroImageUrl?`<div class="art art--media" aria-hidden="true"><img src="${esc(heroImageUrl)}" alt=""></div>`:`<div class="art" aria-hidden="true"><b>W</b><i></i><i></i></div>`;
