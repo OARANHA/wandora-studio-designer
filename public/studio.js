@@ -14,8 +14,10 @@ const openModelsBtn=$('#open-models'), modelsDialog=$('#models-dialog'), modelGr
 const openAssetsBtn=$('#open-assets'), assetsDialog=$('#assets-dialog'), assetRole=$('#asset-role'), assetFile=$('#asset-file'), uploadAssetBtn=$('#upload-asset'), assetGrid=$('#asset-grid');
 const mediaPrompt=$('#media-prompt'), generateImageBtn=$('#generate-image'), generateVideoBtn=$('#generate-video'), mediaStatus=$('#media-status');
 const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGenerateKitBtn=$('#confirm-generate-kit'), kitStatus=$('#kit-status');
+const previewDialog=$('#preview-dialog'), previewTitle=$('#preview-title'), previewFrame=$('#preview-frame'), previewClone=$('#preview-clone'), previewCommand=$('#preview-command'), previewApplyBtn=$('#preview-apply'), previewExportBtn=$('#preview-export'), previewCloseBtn=$('#preview-close');
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, chutesImageReady=false, chutesVideoReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
 let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}};
+let activePreviewKind='';
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
 const voiceDiag=$('#voice-diag'), voiceStages=Object.fromEntries([...voiceDiag.querySelectorAll('[data-stage]')].map(el=>[el.dataset.stage,el]));
 let micListening=false, micWanted=false, micBaseText='', micFinalText='', micInterimText='', voiceCapture=null, voiceSession=0, liveUpdateCount=0;
@@ -56,6 +58,10 @@ function renderGroupSummary(group,answers,ms=0){
   draw?.(latestDecisions,latestCopy,projectV2);
   if(group==='posts')renderStories(latestDecisions,latestCopy);
   if(group==='marca')renderManual(latestDecisions,latestCopy,projectV2);
+  if(previewDialog?.open){
+    const relevant={site:['site'],brand:['marca'],instagram:['posts'],carousel:['posts'],stories:['posts'],email:['email'],ads:['anuncios'],manual:['marca']}[activePreviewKind]||[];
+    if(relevant.includes(group))requestAnimationFrame(()=>renderPreviewContent(activePreviewKind));
+  }
 }
 function resetSignals(){
   latestDecisions={}; latestCopy={}; latestComplete=false; latestVariation=[];
@@ -609,13 +615,78 @@ async function generateCompleteKit(){
     status.textContent='Kit base V2 pronto e versionado.';
   }catch(e){kitStatus.textContent='⚠ '+e.message;}finally{confirmGenerateKitBtn.disabled=false;refreshProjectButtons();}
 }
+const PREVIEW_META=Object.freeze({
+  site:{title:'Site · Página inicial',selector:'#site-preview',mode:'html'},
+  brand:{title:'Marca · Identidade Visual',selector:'#brand-preview',mode:'clone'},
+  instagram:{title:'Instagram · Post + Carrossel',selector:'#posts-preview',mode:'clone'},
+  carousel:{title:'Carrossel · Painel a painel',selector:'#posts-preview',mode:'clone'},
+  stories:{title:'Stories / Reels · 9:16',selector:'#stories-preview',mode:'clone'},
+  email:{title:'E-mail · Template',selector:'#email-preview',mode:'html'},
+  ads:{title:'Anúncios · Kit de formatos',selector:'#ads-preview',mode:'html'},
+  manual:{title:'Manual de Marca',selector:'#manual-preview',mode:'html'},
+});
+function previewHtml(kind){
+  const ctx=exportContext();
+  if(kind==='site')return buildSiteHtml(ctx);
+  if(kind==='email')return buildEmailHtml(ctx);
+  if(kind==='ads')return buildAdsHtml(ctx);
+  if(kind==='manual')return buildBrandManualHtml(ctx);
+  return '';
+}
+function renderPreviewContent(kind=activePreviewKind){
+  const meta=PREVIEW_META[kind]; if(!meta)return;
+  previewTitle.textContent=meta.title;
+  previewFrame.hidden=true; previewClone.hidden=true; previewClone.replaceChildren();
+  if(meta.mode==='html'){
+    previewFrame.hidden=false;
+    previewFrame.srcdoc=previewHtml(kind);
+  }else{
+    const source=document.querySelector(meta.selector);
+    previewClone.hidden=false;
+    if(!source){previewClone.textContent='Material ainda não disponível.';return;}
+    const clone=source.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
+    previewClone.className=`preview-clone preview-clone--${kind}`;
+    previewClone.append(clone);
+  }
+  previewExportBtn.hidden=!['site','email','ads','manual'].includes(kind);
+}
+function openMaterialPreview(kind){
+  const meta=PREVIEW_META[kind]; if(!meta)return;
+  activePreviewKind=kind; selectV2Tab(kind);
+  renderPreviewContent(kind);
+  previewCommand.value='';
+  if(!previewDialog.open)previewDialog.showModal();
+}
+function previewCommandPrefix(kind,text){
+  const target={site:'No site',brand:'Na marca',instagram:'Nos posts',carousel:'No carrossel',stories:'Nos posts',email:'No e-mail',ads:'Nos anúncios',manual:'Na marca'}[kind]||'Nesta peça';
+  return `${target}, ${text}`;
+}
+async function applyPreviewCommand(){
+  const text=previewCommand.value.trim();
+  if(text.split(/\s+/).filter(Boolean).length<2){status.textContent='Descreva o ajuste desta peça em algumas palavras.';return;}
+  previewApplyBtn.disabled=true;
+  try{
+    commandInput.value=previewCommandPrefix(activePreviewKind,text);
+    await applyCommand();
+    previewCommand.value='';
+    renderPreviewContent(activePreviewKind);
+  }finally{previewApplyBtn.disabled=false;}
+}
+function exportActivePreview(){
+  if(activePreviewKind==='site')return exportSite();
+  if(activePreviewKind==='email')return exportEmail();
+  if(activePreviewKind==='ads')return exportAds();
+  if(activePreviewKind==='manual')return exportManual();
+}
 function selectV2Tab(tab){
-  document.querySelectorAll('.v2-nav button').forEach(b=>b.classList.toggle('active',b.dataset.v2Tab===tab));
+  document.querySelectorAll('.v2-nav button[data-v2-tab]').forEach(b=>b.classList.toggle('active',b.dataset.v2Tab===tab));
   const map={site:'.monitor.site',brand:'.monitor.brand-monitor',instagram:'.monitor.posts',carousel:'.monitor.posts',stories:'.monitor.stories',email:'.monitor.email',ads:'.monitor.ads',manual:'.monitor.manual'};
   document.querySelectorAll('.pieces .monitor').forEach(m=>m.classList.remove('v2-focus'));
   if(map[tab])document.querySelector(map[tab])?.classList.add('v2-focus');
-  if(tab==='manual')status.textContent='Manual de Marca V2 usa identidade + ativos; editor dedicado entra nesta base.';
-  if(tab==='stories')status.textContent='Stories V2 deriva o carrossel e os ativos do projeto; módulo visual está preparado na base.';
+  if(tab==='manual')status.textContent='Manual de Marca: clique no card para abrir em tela grande e revisar as aplicações.';
+  if(tab==='stories')status.textContent='Stories / Reels: clique no card para ampliar e ajustar.';
 }
 
 function exportContext(){
@@ -873,8 +944,20 @@ generateImageBtn.addEventListener('click',()=>generateMedia('image'));
 generateVideoBtn.addEventListener('click',()=>generateMedia('video'));
 generateKitBtn.addEventListener('click',openKit);
 confirmGenerateKitBtn.addEventListener('click',generateCompleteKit);
-document.querySelectorAll('.v2-nav button[data-v2-tab]').forEach(b=>b.addEventListener('click',()=>selectV2Tab(b.dataset.v2Tab)));
+document.querySelectorAll('.v2-nav button[data-v2-tab]').forEach(b=>b.addEventListener('click',()=>{
+  const tab=b.dataset.v2Tab;
+  if(tab==='overview'){selectV2Tab(tab);return;}
+  openMaterialPreview(tab);
+}));
 document.querySelectorAll('[data-action-export]').forEach(b=>b.addEventListener('click',openExport));
+[
+  ['.monitor.site','site'],['.monitor.brand-monitor','brand'],['.monitor.posts','instagram'],
+  ['.monitor.stories','stories'],['.monitor.email','email'],['.monitor.ads','ads'],['.monitor.manual','manual']
+].forEach(([selector,kind])=>document.querySelector(selector)?.addEventListener('click',()=>openMaterialPreview(kind)));
+previewCloseBtn.addEventListener('click',()=>previewDialog.close());
+previewApplyBtn.addEventListener('click',applyPreviewCommand);
+previewCommand.addEventListener('keydown',(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();applyPreviewCommand();}});
+previewExportBtn.addEventListener('click',exportActivePreview);
 createProjectBtn.addEventListener('click',createProject);
 projectSelect.addEventListener('change',selectProject);
 saveVersionBtn.addEventListener('click',saveVersion);
