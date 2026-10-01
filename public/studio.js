@@ -15,8 +15,9 @@ const openAssetsBtn=$('#open-assets'), assetsDialog=$('#assets-dialog'), assetRo
 const mediaPrompt=$('#media-prompt'), generateImageBtn=$('#generate-image'), generateVideoBtn=$('#generate-video'), mediaStatus=$('#media-status');
 const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGenerateKitBtn=$('#confirm-generate-kit'), kitStatus=$('#kit-status');
 const previewDialog=$('#preview-dialog'), previewTitle=$('#preview-title'), previewFrame=$('#preview-frame'), previewClone=$('#preview-clone'), previewCommand=$('#preview-command'), previewApplyBtn=$('#preview-apply'), previewExportBtn=$('#preview-export'), previewCloseBtn=$('#preview-close'), previewMicBtn=$('#preview-mic');
+const pipelineBriefing=$('#pipeline-briefing'), pipelineMaterials=$('#pipeline-materials'), pipelineKit=$('#pipeline-kit'), heroCalloutTitle=$('#hero-callout-title'), heroCalloutText=$('#hero-callout-text');
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, chutesImageReady=false, chutesVideoReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
-let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null};
+let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
 let activePreviewKind='';
 function viewV2(){return {...projectV2,projectId:activeProject?.id||projectV2?.creativePlan?.projectId||''};}
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
@@ -28,6 +29,67 @@ const signal={site:$('#signal-site'),marca:$('#brand-signal'),posts:$('#signal-p
 const cableTargets={site:$('.monitor.site'),posts:$('.monitor.posts'),marca:$('.monitor.brand-monitor'),email:$('.monitor.email'),anuncios:$('.monitor.ads')};
 const cables=createSignalCables({svg:$('#signal-cables'),source:briefingLabel,targets:cableTargets});
 const decisionScheduler=createDecisionScheduler({getText:()=>briefing.value,run:(text,seq)=>runDecisionUpdate(text,seq,{live:micWanted||micListening})});
+
+const BRIEFING_COLOR_DEFS=[
+  ['vermelho','Vermelho','#d62828',['vermelho','vermelha','red']],
+  ['azul','Azul','#2563eb',['azul','azul royal','azul-royal','blue']],
+  ['azul_marinho','Azul-marinho','#1b2a4e',['azul marinho','azul-marinho','marinho','navy']],
+  ['verde','Verde','#1f9d55',['verde','green']],
+  ['verde_limao','Verde-limão','#a3e635',['verde limao','verde-limao','verde neon']],
+  ['preto','Preto','#111111',['preto','black']],
+  ['branco','Branco','#ffffff',['branco','white']],
+  ['amarelo','Amarelo','#facc15',['amarelo','yellow']],
+  ['laranja','Laranja','#f97316',['laranja','orange']],
+  ['rosa','Rosa','#ec6fa6',['rosa','pink']],
+  ['roxo','Roxo','#6d28d9',['roxo','violeta','purple']],
+  ['cinza','Cinza','#9aa0a8',['cinza','gray']],
+  ['grafite','Grafite','#363b44',['grafite','chumbo','antracite']],
+  ['bege','Bege','#e6d5b8',['bege','areia']],
+  ['dourado','Dourado','#c9a55c',['dourado','ouro','gold']],
+];
+function briefNorm(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
+function mixBriefHex(a,b,ratio=.5){
+  const parse=h=>{const s=String(h||'').replace('#','');return /^[0-9a-f]{6}$/i.test(s)?[0,2,4].map(i=>parseInt(s.slice(i,i+2),16)):null;};
+  const x=parse(a),y=parse(b);if(!x||!y)return a||b||'#777777';
+  const r=Math.max(0,Math.min(1,Number(ratio)||0));return '#'+x.map((v,i)=>Math.round(v*(1-r)+y[i]*r).toString(16).padStart(2,'0')).join('');
+}
+function extractBriefingFactsLocal(text=''){
+  const raw=briefNorm(text),hasContext=/(?:\bcores?\b|\bpaleta\b|\bprimarias?\b|\bsecundarias?\b|\bidentidade\s+visual\b)/.test(raw);
+  const found=[];
+  for(const [id,name,hex,aliases] of BRIEFING_COLOR_DEFS){
+    let pos=-1;
+    for(const aliasRaw of aliases){
+      const alias=briefNorm(aliasRaw).replace(/[.*+?^$()|[\]\\{}]/g,'\\const decisionScheduler=createDecisionScheduler({getText:()=>briefing.value,run:(text,seq)=>runDecisionUpdate(text,seq,{live:micWanted||micListening})});
+').replace(/\s+/g,'\\s+');
+      const re=new RegExp('(?:^|[^a-z0-9])('+alias+')(?=$|[^a-z0-9])','g');
+      const m=re.exec(raw);if(m){pos=m.index+(m[0].length-m[1].length);break;}
+    }
+    if(pos>=0)found.push({id,name,hex,index:pos});
+  }
+  found.sort((a,b)=>a.index-b.index);
+  const colors=(hasContext||found.length>=2?found:[]).slice(0,4).map(({id,name,hex})=>({id,name,hex}));
+  let palette=[];
+  if(colors.length===1)palette=[colors[0].hex,'#111111','#f7f7f4',mixBriefHex(colors[0].hex,'#ffffff',.65),mixBriefHex(colors[0].hex,'#000000',.35)];
+  else if(colors.length===2)palette=[colors[0].hex,colors[1].hex,'#f7f7f4','#111111',mixBriefHex(colors[0].hex,colors[1].hex,.5)];
+  else if(colors.length>=3)palette=[colors[0].hex,colors[1].hex,'#f7f7f4','#111111',colors[2].hex];
+  return {colors,palette,explicitColors:colors.length>0};
+}
+function syncBriefingFacts(text=briefing.value){
+  projectV2={...projectV2,briefingFacts:extractBriefingFactsLocal(text)};
+}
+function setPipelineState(el,state,label){if(!el)return;el.dataset.state=state;const i=el.querySelector('i'),s=el.querySelector('span');if(i)i.textContent=state==='done'?'✓':state==='working'?'◌':'○';if(s&&label)s.textContent=label;}
+function updatePipeline(){
+  const kit=projectV2?.kitStatus||'draft';
+  setPipelineState(pipelineBriefing,latestComplete?'done':'idle',latestComplete?'Briefing analisado':'Briefing aguardando');
+  const generating=kit==='planning'||kit==='generating';
+  setPipelineState(pipelineMaterials,kit==='ready'?'done':generating?'working':'idle',kit==='ready'?'Materiais gerados':generating?'Materiais em criação':'Materiais pendentes');
+  setPipelineState(pipelineKit,kit==='ready'?'done':'idle',kit==='ready'?'Kit completo':'Kit pendente');
+  if(!heroCalloutTitle||!heroCalloutText)return;
+  if(kit==='ready'){heroCalloutTitle.textContent='Tudo pronto!';heroCalloutText.textContent='Textos, direção visual e mídias foram aplicados ao kit.';}
+  else if(generating){heroCalloutTitle.textContent='Criando seu kit…';heroCalloutText.textContent='O Studio está produzindo e aplicando os materiais do projeto.';}
+  else if(latestComplete){heroCalloutTitle.textContent='Briefing entendido';heroCalloutText.textContent='Agora gere o kit completo para produzir textos, imagens e composições.';}
+  else{heroCalloutTitle.textContent='Conte sobre o negócio';heroCalloutText.textContent='O Studio vai analisar o briefing antes de produzir o kit.';}
+}
 
 function answerText(a){
   if(!a)return '—';
@@ -81,13 +143,14 @@ function refreshProjectButtons(){
   saveVersionBtn.disabled=!activeProject || !latestComplete;
   generateCopyBtn.disabled=!latestComplete || !writerReady || copyGenerating;
   openAssetsBtn.disabled=!activeProject;
-  generateKitBtn.disabled=!activeProject || briefing.value.trim().split(/\s+/).filter(Boolean).length<2 || copyGenerating;
+  generateKitBtn.disabled=briefing.value.trim().split(/\s+/).filter(Boolean).length<2 || copyGenerating;
   openModelsBtn.textContent=`MODELOS · ${String(modelRouting.mode||'auto').toUpperCase()}`;
   anotherVersionBtn.disabled=!latestComplete;
   xrayBtn.disabled=!latestComplete;
   applyCommandBtn.disabled=commandBusy;
   backJevBtn.hidden=!latestVariation.length;
   exportBtn.disabled=!latestComplete;
+  updatePipeline();
 }
 async function json(url,opts={}){
   const r=await fetch(url,{...opts,headers:{'content-type':'application/json',...(opts.headers||{})}});
@@ -119,9 +182,9 @@ async function loadProjects(selectId=null){
   if(previous && d.projects.some(p=>p.id===previous)){
     projectSelect.value=previous; activeProject=d.projects.find(p=>p.id===previous);
     modelRouting=activeProject.modelRouting||{mode:'auto',selections:{}};
-    projectV2=activeProject.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null};
+    projectV2=activeProject.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
   }
-  else if(!previous){ activeProject=null; projectSelect.value=''; modelRouting={mode:'auto',selections:{}}; projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null}; }
+  else if(!previous){ activeProject=null; projectSelect.value=''; modelRouting={mode:'auto',selections:{}}; projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; }
   refreshProjectButtons();
 }
 async function createProject(){
@@ -129,15 +192,15 @@ async function createProject(){
   createProjectBtn.disabled=true;
   try{
     const d=await json('/api/projects',{method:'POST',body:JSON.stringify({name,clientName:clientName.value,briefing:briefing.value})});
-    activeProject=d.project; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null}; projectName.value=''; clientName.value=''; await loadProjects(d.project.id);
+    activeProject=d.project; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; projectName.value=''; clientName.value=''; await loadProjects(d.project.id);
     status.textContent=`Projeto “${d.project.name}” criado.`;
   }catch(e){status.textContent=e.message;}finally{createProjectBtn.disabled=false;}
 }
 async function selectProject(){
   const id=projectSelect.value;
-  if(!id){activeProject=null;modelRouting={mode:'auto',selections:{}};projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null};refreshProjectButtons();status.textContent='Novo projeto: dê um nome e crie quando quiser salvar versões.';return;}
+  if(!id){activeProject=null;modelRouting={mode:'auto',selections:{}};projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};refreshProjectButtons();status.textContent='Novo projeto: dê um nome e crie quando quiser salvar versões.';return;}
   try{
-    const d=await json(`/api/projects/${id}`); activeProject=d.project; briefing.value=d.project.briefing||''; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null}; resetSignals(); refreshProjectButtons();
+    const d=await json(`/api/projects/${id}`); activeProject=d.project; briefing.value=d.project.briefing||''; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; resetSignals(); refreshProjectButtons();
     status.textContent=`Projeto “${d.project.name}” carregado · ${d.project.versionCount||0} versão(ões) · modelos ${modelRouting.mode}.`;
   }catch(e){status.textContent=e.message;}
 }
@@ -497,7 +560,7 @@ async function applyCommand(){
 function copyShape(fields={}){
   const first=(v)=>String(v||'').split(/\n|[.!?](?:\s|$)/)[0].trim().slice(0,86);
   return {
-    brand:{name:activeProject?.clientName||activeProject?.name||'',slogan:fields.slogan||''},
+    brand:{name:activeProject?.clientName||'',slogan:fields.slogan||''},
     site:{headline:fields.titulo||'',subheadline:fields.subtitulo||''},
     posts:{
       presentation:{title:first(fields.legenda1),caption:fields.legenda1||''},
@@ -642,7 +705,20 @@ async function generateMedia(kind){
   }
 }
 
-function openKit(){if(!activeProject)return;kitStatus.textContent='';kitDialog.showModal();}
+function openKit(){kitStatus.textContent='';kitDialog.showModal();}
+
+async function ensureActiveProjectForKit(){
+  if(activeProject)return activeProject;
+  const seg=String(latestDecisions?.entender?.seg?.choice||'projeto').replaceAll('_',' ');
+  const stamp=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).replace(',','');
+  const facts=projectV2.briefingFacts||extractBriefingFactsLocal(briefing.value);
+  const d=await json('/api/projects',{method:'POST',body:JSON.stringify({name:`Kit · ${seg} · ${stamp}`,clientName:'',briefing:briefing.value})});
+  activeProject=d.project;modelRouting=d.project.modelRouting||modelRouting;
+  await loadProjects(d.project.id);
+  projectV2={...projectV2,briefingFacts:facts};
+  refreshProjectButtons();
+  return activeProject;
+}
 
 async function materializeCreativeAssets(plan){
   if(!plan||!Array.isArray(plan.assets))return plan;
@@ -661,6 +737,7 @@ async function materializeCreativeAssets(plan){
     const item=queue[i];
     item.status='generating';item.error=null;
     projectV2={...projectV2,kitStatus:'generating',creativePlan:plan};
+    updatePipeline();
     kitStatus.textContent=`4/5 · Chutes criando mídia ${i+1}/${queue.length} · ${item.slot}`;
     try{
       const d=await json('/api/v2/media/image',{method:'POST',body:JSON.stringify({
@@ -702,6 +779,7 @@ async function generateCompleteKit(){
   if(!materials.length){kitStatus.textContent='Escolha ao menos um entregável.';return;}
   confirmGenerateKitBtn.disabled=true;kitStatus.textContent='1/5 · entendendo negócio e fechando decisões…';
   try{
+    await ensureActiveProjectForKit();
     if(!latestComplete){
       await runDecisionUpdate(briefing.value,Date.now(),{live:false});
       if(!latestComplete)throw new Error('As 89 decisões não fecharam; confira os canais antes de continuar.');
@@ -713,13 +791,15 @@ async function generateCompleteKit(){
     const planned=await json('/api/v2/creative-plan',{method:'POST',body:JSON.stringify({
       projectId:activeProject.id,briefing:briefing.value,materials,decisions:latestDecisions,copy:latestCopy,useJev:true,
     })});
-    projectV2=planned.v2||{...projectV2,materials,creativePlan:planned.plan,kitStatus:'planning'};
+    projectV2=planned.v2||{...projectV2,materials,creativePlan:planned.plan,briefingFacts:planned.plan?.briefingFacts||projectV2.briefingFacts,kitStatus:'planning'};
+    updatePipeline();
     activeProject={...activeProject,v2:projectV2};
 
     const plan=await materializeCreativeAssets(projectV2.creativePlan);
     const required=plan?.assets?.filter(a=>a?.required!==false)||[];
     const pending=required.filter(a=>!a?.assetId).length;
-    projectV2={...projectV2,materials,creativePlan:plan,kitStatus:pending?'generating':'ready'};
+    projectV2={...projectV2,materials,creativePlan:plan,briefingFacts:plan?.briefingFacts||projectV2.briefingFacts,kitStatus:pending?'generating':'ready'};
+    updatePipeline();
 
     kitStatus.textContent='5/5 · salvando composição, assets e versão do projeto…';
     const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({briefing:briefing.value,modelRouting,v2:projectV2})});
@@ -1039,6 +1119,7 @@ async function readSse(response,onEvent){
 async function runDecisionUpdate(texto,seq,{live=false}={}){
   texto=String(texto||'').trim();
   if(texto.split(/\s+/).filter(Boolean).length<2)return;
+  syncBriefingFacts(texto);
   copyController?.abort(); copyGenerating=false;
   const controller=new AbortController(); activeController=controller;
   latestCopy={}; latestComplete=false; latestVariation=[]; refreshProjectButtons();
@@ -1069,7 +1150,7 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
         latestComplete=d.ok&&decisions===89; liveUpdateCount+=latestComplete?1:0; refreshProjectButtons(); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
         status.textContent=live&&micWanted
           ?`🎙️ Ouvindo… 89 decisões atualizadas em ${total} ms · atualização ${liveUpdateCount}. Continue falando.`
-          :latestComplete?'89 decisões prontas. Você já pode salvar esta versão.':`Canais concluídos com ${failures} erro(s).`;
+          :latestComplete?'89 decisões prontas. Agora clique em “Gerar kit completo” para produzir textos, imagens e composições.':`Canais concluídos com ${failures} erro(s).`;
       }
     });
   }catch(e){
