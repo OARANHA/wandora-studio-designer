@@ -527,7 +527,7 @@ async function ensureCreativePlanForStory(text){
   const existing=projectV2?.creativePlan;
   const hasStory=Array.isArray(existing?.assets)&&existing.assets.some(a=>String(a?.slot||'').startsWith('stories.'));
   if(hasStory)return existing;
-  const materials=[...new Set([...(existing?.deliverables||projectV2?.materials||[]),'stories'])];
+  const materials=[...new Set([...(existing?.deliverables||projectV2?.materials||[]),'site','stories'])];
   status.textContent='Preparando o Story no plano criativo…';
   const planned=await json('/api/v2/creative-plan',{method:'POST',body:JSON.stringify({
     projectId:activeProject.id,briefing:text,materials,decisions:latestDecisions,studioContext:projectV2.studioContext,useJev:true,
