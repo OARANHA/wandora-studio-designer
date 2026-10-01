@@ -1,4 +1,5 @@
 import { jevDecide } from '../ai/jev.mjs';
+import { extractBriefingFacts } from './briefing-facts.mjs';
 
 const norm=(v)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 const compact=(v,max=900)=>String(v||'').replace(/\s+/g,' ').trim().slice(0,max);
@@ -87,14 +88,15 @@ function dimensions(slot){
   if(slot.startsWith('ads.'))return {width:1200,height:1200,aspect:'1:1'};
   return {width:1200,height:1200,aspect:'1:1'};
 }
-function promptFor({pack,archetype,subject,slot,mode='photography',briefing=''}) {
+function promptFor({pack,archetype,subject,slot,mode='photography',briefing='',facts={}}) {
   const style=VISUAL_ARCHETYPES[archetype]?.image||VISUAL_ARCHETYPES['minimal-modern'].image;
   const aspect=dimensions(slot).aspect;
   const medium=mode==='illustration'
     ? 'high-end editorial illustration, believable spatial depth, sophisticated commercial art direction'
     : 'high-end commercial photography, realistic materials, natural human proportions when people appear';
   const negative='No text, no typography, no logos, no watermark, no UI, no distorted hands, no duplicated objects, no malformed faces.';
-  return compact(`${medium}. ${subject}. ${style}. Composition designed for ${slot.replaceAll('.',' ')}, ${aspect}, with intentional negative space for marketing copy. Brand context: ${compact(briefing,420)}. ${negative}`,1800);
+  const explicit=Array.isArray(facts?.colors)&&facts.colors.length?` Mandatory brand colors: ${facts.colors.map(c=>`${c.name} ${c.hex}`).join(', ')}. Use these colors as the dominant visual palette and do not replace them with unrelated brand colors.`:'';
+  return compact(`${medium}. ${subject}. ${style}.${explicit} Composition designed for ${slot.replaceAll('.',' ')}, ${aspect}, with intentional negative space for marketing copy. Brand context: ${compact(briefing,420)}. ${negative}`,1800);
 }
 function storyCopy(pack){
   const label=pack.label;
@@ -112,6 +114,7 @@ function normalizeMaterials(materials){
 }
 
 export function buildCreativePlanFromSignals({projectId='',briefing='',materials=[],nicheId,archetype,heroComposition,mediaMode}={}){
+  const facts=extractBriefingFacts(briefing);
   const pickedNiche=NICHE_PACKS[nicheId]?nicheId:detectNicheFallback(briefing);
   const pack=NICHE_PACKS[pickedNiche]||NICHE_PACKS.general;
   const pickedArchetype=VISUAL_ARCHETYPES[archetype]?archetype:explicitArchetype(briefing,pack);
@@ -136,7 +139,7 @@ export function buildCreativePlanFromSignals({projectId='',briefing='',materials
       required:true,
       auto:true,
       status:'planned',
-      prompt:promptFor({pack,archetype:pickedArchetype,subject,slot,mode,briefing}),
+      prompt:promptFor({pack,archetype:pickedArchetype,subject,slot,mode,briefing,facts}),
       negativePrompt:'text, typography, logo, watermark, distorted anatomy, duplicated objects',
       width:size.width,height:size.height,aspect:size.aspect,
       assetId:null,contentUrl:null,error:null,
@@ -160,10 +163,13 @@ export function buildCreativePlanFromSignals({projectId='',briefing='',materials
       businessModel:pack.businessModel,
       tone:pack.tone,
     },
+    briefingFacts:facts,
     brand:{
       archetype:pickedArchetype,
       archetypeLabel:VISUAL_ARCHETYPES[pickedArchetype]?.label||pickedArchetype,
       imageDirection:VISUAL_ARCHETYPES[pickedArchetype]?.image||'',
+      explicitColors:facts.colors,
+      palette:facts.palette,
     },
     deliverables,
     site:{
