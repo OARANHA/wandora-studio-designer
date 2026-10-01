@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { loginHeroWebp, wandoraLogoWebp } from './brand-assets.mjs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config, assertProductionConfig } from './config.mjs';
@@ -23,23 +23,6 @@ assertProductionConfig();
 const here = dirname(fileURLToPath(import.meta.url));
 const PUBLIC = join(here, '..', 'public');
 
-async function materializeBrandAssets(){
-  const dir=join(config.dataDir,'branding');
-  const specs=[
-    ['STUDIO_LOGIN_ASSET_B64','login.webp'],
-    ['STUDIO_LOGO_ASSET_B64','logo.webp'],
-  ];
-  for(const [envName,file] of specs){
-    const value=String(process.env[envName]||'').trim();
-    if(!value)continue;
-    const body=Buffer.from(value,'base64');
-    const valid=body.length>1024&&body.subarray(0,4).toString()==='RIFF'&&body.subarray(8,12).toString()==='WEBP';
-    if(!valid)throw new Error(`${envName} não contém um WebP válido.`);
-    await mkdir(dir,{recursive:true,mode:0o700});
-    await writeFile(join(dir,file),body,{mode:0o600});
-  }
-}
-await materializeBrandAssets();
 
 function loginPage(error = '') {
   const msg = error === 'limite' ? 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' : error ? 'E-mail ou senha incorretos.' : '';
