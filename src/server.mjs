@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { config, assertProductionConfig } from './config.mjs';
@@ -23,16 +24,16 @@ const PUBLIC = join(here, '..', 'public');
 
 function loginPage(error = '') {
   const msg = error === 'limite' ? 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' : error ? 'E-mail ou senha incorretos.' : '';
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css?v=20260930-login4"></head>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css?v=20261001-loginfix1"></head>
   <body class="login-body">
     <main class="login-shell">
       <section class="login-hero login-hero-approved" aria-hidden="true">
-        <img class="login-hero-image" src="/assets/wandora-login-hero-approved.webp" alt="">
+        <img class="login-hero-image" src="/brand/login.webp" alt="">
       </section>
       <section class="login-panel">
         <div class="login-lang">◎&nbsp; Português (BR) &nbsp;⌄</div>
         <div class="login-window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
-        <div class="login-brand-plate"><img src="/assets/wandora-logo.png" alt="Wandora"></div>
+        <div class="login-brand-plate"><img src="/brand/logo.webp" alt="Wandora"></div>
         <div class="login-product">STUDIO DESIGNER</div>
         <div class="login-accent"></div>
         <h1>Entrar no<br><strong>Studio Designer</strong></h1>
@@ -69,6 +70,16 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'");
 
     if (path === '/healthz') return sendJson(res, 200, { ok:true, app:'wandora-studio-designer', version:'0.1.0' });
+    if (path === '/brand/login.webp' || path === '/brand/logo.webp') {
+      const name=path.endsWith('login.webp')?'login.webp':'logo.webp';
+      try{
+        const body=await readFile(join(config.dataDir,'branding',name));
+        res.writeHead(200,{'content-type':'image/webp','content-length':body.length,'cache-control':'public, max-age=86400, immutable','x-content-type-options':'nosniff'});
+        return res.end(body);
+      }catch{
+        return sendJson(res,404,{ok:false,error:'Brand asset ausente.',code:'brand_asset_missing'});
+      }
+    }
     if (path === '/studio.css' || path.startsWith('/assets/')) { const ok=await serveStatic(res, PUBLIC, path); if(ok)return; }
     if (path === '/login' && req.method === 'GET') {
       if (sessionFromRequest(req)) return redirect(res, '/');
