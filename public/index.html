@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex,nofollow">
   <meta name="theme-color" content="#0b0c0b">
   <title>Wandora Studio Designer</title>
-  <link rel="stylesheet" href="/studio.css?v=20260930-dashboard2">
+  <link rel="stylesheet" href="/studio.css?v=20260930-viewer1">
 </head>
 <body class="dashboard-body">
   <svg id="signal-cables" class="signal-cables" aria-hidden="true"><path data-group="site"/><path data-group="posts"/><path data-group="marca"/><path data-group="email"/><path data-group="anuncios"/></svg>
@@ -108,27 +108,7 @@
 
       <section class="dashboard-hero">
         <div class="hero-mascot-wrap" aria-hidden="true">
-          <svg class="hero-mascot" viewBox="0 0 330 260">
-            <defs>
-              <linearGradient id="mBody" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff9e4"/><stop offset=".55" stop-color="#f0dcb8"/><stop offset="1" stop-color="#bba98d"/></linearGradient>
-              <linearGradient id="mDark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#353733"/><stop offset="1" stop-color="#070807"/></linearGradient>
-              <linearGradient id="mLime" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f0ff45"/><stop offset="1" stop-color="#b9df00"/></linearGradient>
-            </defs>
-            <ellipse cx="164" cy="238" rx="120" ry="14" fill="#000" opacity=".28"/>
-            <g transform="translate(38 20)">
-              <rect x="63" y="18" width="146" height="132" rx="47" fill="url(#mDark)" stroke="#050505" stroke-width="7"/>
-              <rect x="74" y="29" width="124" height="108" rx="39" fill="url(#mBody)" stroke="#0a0a0a" stroke-width="5"/>
-              <ellipse cx="109" cy="78" rx="10" ry="18" fill="#070707"/><ellipse cx="163" cy="78" rx="10" ry="18" fill="#070707"/>
-              <path d="M121 104 Q136 120 152 103" fill="none" stroke="#070707" stroke-width="7" stroke-linecap="round"/>
-              <ellipse cx="95" cy="109" rx="12" ry="6" fill="#d9ff00"/><ellipse cx="177" cy="109" rx="12" ry="6" fill="#d9ff00"/>
-              <rect x="105" y="-8" width="58" height="44" rx="10" fill="url(#mDark)" stroke="#050505" stroke-width="5"/>
-              <rect x="112" y="-2" width="44" height="32" rx="7" fill="url(#mLime)"/><text x="134" y="23" text-anchor="middle" font-family="Arial" font-size="24" font-weight="900">W</text>
-              <rect x="89" y="142" width="95" height="74" rx="26" fill="url(#mBody)" stroke="#0a0a0a" stroke-width="6"/>
-              <rect x="111" y="163" width="52" height="39" rx="9" fill="url(#mLime)" stroke="#090909" stroke-width="4"/><text x="137" y="191" text-anchor="middle" font-family="Arial" font-size="26" font-weight="900">W</text>
-              <path d="M180 160 C222 151 239 126 242 104 C250 96 264 99 267 110 C271 130 262 150 248 164 C267 158 278 170 274 181 C266 201 229 207 193 202 Z" fill="url(#mBody)" stroke="#090909" stroke-width="6"/>
-              <rect x="45" y="55" width="25" height="64" rx="12" fill="url(#mLime)" stroke="#090909" stroke-width="5"/><rect x="203" y="55" width="25" height="64" rx="12" fill="url(#mLime)" stroke="#090909" stroke-width="5"/>
-            </g>
-          </svg>
+          <img class="hero-mascot-photo" src="/assets/wandora-login-hero-approved.webp" alt="">
         </div>
 
         <div class="dashboard-hero-copy">
@@ -191,6 +171,30 @@
     </main>
   </div>
 
+  <dialog id="preview-dialog" class="preview-dialog">
+    <div class="preview-shell">
+      <header class="preview-head">
+        <div><small>WANDORA STUDIO DESIGNER</small><b id="preview-title">Visualização</b></div>
+        <div class="preview-head-actions">
+          <button class="key" id="preview-export" type="button">EXPORTAR</button>
+          <button class="preview-close" id="preview-close" type="button" aria-label="Fechar">×</button>
+        </div>
+      </header>
+      <section class="preview-stage">
+        <iframe id="preview-frame" title="Visualização do material" sandbox="allow-same-origin" hidden></iframe>
+        <div id="preview-clone" class="preview-clone" hidden></div>
+      </section>
+      <footer class="preview-command-bar">
+        <div class="preview-command-copy">
+          <b>Edite esta peça por comando</b>
+          <span>O microfone da lateral continua funcionando enquanto esta tela estiver aberta.</span>
+        </div>
+        <input id="preview-command" maxlength="400" placeholder="Ex.: adiciona FAQ, troca o CTA, usa o mascote, deixa mais premium…">
+        <button class="key key-primary" id="preview-apply" type="button">APLICAR</button>
+      </footer>
+    </div>
+  </dialog>
+
   <dialog id="models-dialog" class="versions-dialog models-dialog">
     <form method="dialog" class="dialog-head"><b>V2 · MODELOS E ROTEAMENTO</b><button class="key" value="cancel">FECHAR</button></form>
     <div class="model-routing">
@@ -233,6 +237,6 @@
   <dialog id="export-dialog" class="versions-dialog export-dialog"><form method="dialog" class="dialog-head"><b>EXPORTAR ARTEFATOS</b><button class="key" value="cancel">FECHAR</button></form><div class="export-grid"><button class="key" id="export-site" type="button">SITE · HTML ÚNICO</button><button class="key" id="export-email" type="button">E-MAIL · HTML</button><button class="key" id="export-signature" type="button">ASSINATURA · HTML</button><button class="key" id="copy-signature" type="button">COPIAR ASSINATURA</button><button class="key" id="export-ads" type="button">BANNERS · 6 FORMATOS</button><button class="key" id="export-manual" type="button">MANUAL · HTML</button><button class="key" id="export-json" type="button">PROJETO · JSON</button></div><p class="export-note">Arquivos gerados localmente no navegador. Chaves de API nunca entram nos downloads.</p></dialog>
   <dialog id="xray-dialog" class="xray-dialog"><form method="dialog" class="dialog-head"><b>RAIO-X · 89 DECISÕES</b><button class="key" value="cancel">FECHAR</button></form><div id="xray-summary" class="xray-summary"></div><div id="xray-list" class="xray-list"></div></dialog>
 
-  <script type="module" src="/studio.js?v=20260930-dashboard2"></script>
+  <script type="module" src="/studio.js?v=20260930-viewer1"></script>
 </body>
 </html>
