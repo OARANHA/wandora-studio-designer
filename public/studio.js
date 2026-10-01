@@ -605,11 +605,15 @@ async function tryCreativeMediaCommand(comando){
     status.textContent=`Entendi a mudança visual em ${intent.label}, mas o Chutes de imagem ainda não está conectado neste servidor.`;
     return true;
   }
-  status.textContent=`Diretor Criativo revisando ${intent.label}…`;
-  const d=await json('/api/v2/media/revise-slot',{method:'POST',body:JSON.stringify({
-    projectId:activeProject.id,slot:intent.slot,instruction:comando,
+  const currentItem=projectV2?.creativePlan?.assets?.find(a=>a?.slot===intent.slot);
+  const endpoint=currentItem?.assetId?'/api/v2/media/revise-slot':'/api/v2/media/materialize-slot';
+  status.textContent=currentItem?.assetId
+    ?`Diretor Criativo revisando ${intent.label}…`
+    :`Gerando imagem real para ${intent.label}…`;
+  const d=await json(endpoint,{method:'POST',body:JSON.stringify({
+    projectId:activeProject.id,slot:intent.slot,instruction:comando,useJev:true,
   })});
-  projectV2={...projectV2,creativePlan:d.plan,kitStatus:d.plan?.status==='ready'?'ready':'generating'};
+  projectV2=d.v2||{...projectV2,creativePlan:d.plan,kitStatus:d.plan?.status==='ready'?'ready':'generating'};
   activeProject={...activeProject,v2:projectV2};
   latestVariation=[];
   renderAll(latestDecisions,latestCopy,viewV2());renderSiteThumbnail();renderLocks();
