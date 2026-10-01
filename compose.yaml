@@ -15,8 +15,6 @@ services:
       STUDIO_ADMIN_EMAIL: ${STUDIO_ADMIN_EMAIL:-admin@wandora.com.br}
       STUDIO_ADMIN_PASSWORD_HASH: ${STUDIO_ADMIN_PASSWORD_HASH:-}
       STUDIO_DEV_PASSWORD: ${STUDIO_DEV_PASSWORD:-}
-      STUDIO_LOGIN_ASSET_B64: ${STUDIO_LOGIN_ASSET_B64:-}
-      STUDIO_LOGO_ASSET_B64: ${STUDIO_LOGO_ASSET_B64:-}
       JEV_BASE_URL: ${JEV_BASE_URL:-https://api.typesafe.ai}
       JEV_API_KEY: ${JEV_API_KEY:-}
       JEV_MODEL: ${JEV_MODEL:-jev-latest}
@@ -45,6 +43,7 @@ services:
       - vigia-edge
     volumes:
       - studio_data:/app/data
+      - /opt/wandora/ops-workspace/studio-branding:/app/data/branding:ro
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
