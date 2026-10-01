@@ -43,6 +43,15 @@ function cleanBriefingFacts(value) {
   const palette=Array.isArray(value.palette)?value.palette.slice(0,5).map(x=>String(x||'').toLowerCase()).filter(x=>/^#[0-9a-f]{6}$/i.test(x)):[];
   return {colors,palette,explicitColors:colors.length>0};
 }
+function cleanStudioContext(value) {
+  if(!value || typeof value!=='object' || Array.isArray(value))return null;
+  const raw=safeJsonSize(value,90_000,'Contexto do Studio');
+  const ctx=JSON.parse(raw);
+  ctx.schema=1;
+  ctx.generatedAt=cleanText(ctx.generatedAt,80);
+  ctx.briefing=String(ctx.briefing||'').trim().slice(0,5000);
+  return ctx;
+}
 function cleanCreativePlan(value) {
   if(!value || typeof value!=='object' || Array.isArray(value))return null;
   const raw=safeJsonSize(value,140_000,'Plano criativo');
@@ -81,8 +90,9 @@ function cleanV2(value = {}) {
     sections:Array.isArray(raw.sections)?raw.sections.map(x=>cleanText(typeof x==='string'?x:x?.id,40)).filter(x=>allowedSections.has(x)).filter((x,i,a)=>a.indexOf(x)===i).slice(0,12):[],
   };
   const creativePlan=cleanCreativePlan(value?.creativePlan);
-  const briefingFacts=cleanBriefingFacts(value?.briefingFacts||creativePlan?.briefingFacts);
-  return {kitStatus,materials,siteStructure,creativePlan,briefingFacts};
+  const studioContext=cleanStudioContext(value?.studioContext||creativePlan?.studioContext);
+  const briefingFacts=cleanBriefingFacts(value?.briefingFacts||studioContext?.briefingFacts||creativePlan?.briefingFacts);
+  return {kitStatus,materials,siteStructure,creativePlan,studioContext,briefingFacts};
 }
 async function readJsonFile(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
