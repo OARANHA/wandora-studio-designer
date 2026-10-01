@@ -284,3 +284,37 @@ linear-gradient(0deg,#ffb66920,transparent 65%);box-shadow:none}
 .login-lang{position:absolute;right:34px;top:28px;color:#e2e1dc;font-size:13px}
 @media(max-width:980px){.login-shell{grid-template-columns:1fr minmax(390px,.9fr)}.login-float-stack{display:none}.login-voice-bubble{left:31%}}
 @media(max-width:790px){.login-shell{display:block}.login-hero{min-height:390px}.login-panel{min-height:calc(100vh - 390px)}.login-lang{top:18px;right:20px}}
+
+
+
+/* === Canonical 3D mascot + material fullscreen viewer === */
+.login-hero-approved{overflow:hidden!important;background:#19110d!important}
+.login-hero-approved:before{display:none!important}
+.login-hero-approved:after{content:''!important;display:block!important;position:absolute!important;inset:0!important;background:linear-gradient(90deg,transparent 0 72%,#090a0988 100%),linear-gradient(0deg,#0004,transparent 24%)!important;z-index:2!important;pointer-events:none}
+.login-hero-image{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center;display:block;z-index:1;filter:saturate(1.03) contrast(1.025)}
+.hero-mascot-wrap{overflow:hidden;border-radius:16px;background:#17110d;box-shadow:inset 0 0 0 1px #ffffff12,0 18px 38px #0007}
+.hero-mascot-photo{width:100%;height:100%;display:block;object-fit:cover;object-position:49% 58%;transform:scale(1.08);filter:saturate(1.07) contrast(1.05)}
+.monitor{position:relative;cursor:pointer;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+.monitor:hover{transform:translateY(-2px);border-color:#7f8378;box-shadow:0 17px 34px #0008,0 0 0 1px #d9ff001a}
+.monitor:after{content:'ABRIR ↗';position:absolute;right:10px;bottom:9px;z-index:8;padding:5px 8px;border:1px solid #d9ff0077;border-radius:999px;background:#0c0e0be8;color:#d9ff00;font:900 7px ui-monospace,monospace;letter-spacing:.05em;opacity:0;transform:translateY(3px);transition:.15s;pointer-events:none;box-shadow:0 5px 14px #0008}
+.monitor:hover:after{opacity:1;transform:none}
+
+.preview-dialog{width:min(1540px,97vw);height:min(930px,95vh);max-width:none;max-height:none;margin:auto;padding:0;border:1px solid #4a4d45;border-radius:18px;background:#0b0c0b;color:#f4f3ed;box-shadow:0 40px 120px #000d;overflow:hidden}
+.preview-dialog::backdrop{background:#020302d9;backdrop-filter:blur(10px)}
+.preview-shell{height:100%;display:grid;grid-template-rows:68px minmax(0,1fr) 82px}
+.preview-head{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:10px 15px 10px 20px;background:linear-gradient(90deg,#161816,#231b17);border-bottom:1px solid #3c3f39}
+.preview-head>div:first-child{display:grid;gap:4px}.preview-head small{font:800 7px ui-monospace,monospace;letter-spacing:.17em;color:#7f837a}.preview-head b{font-size:18px;letter-spacing:-.02em}.preview-head-actions{display:flex;align-items:center;gap:8px}.preview-head .key{margin:0;min-width:110px;height:38px}.preview-close{width:40px;height:40px;border:1px solid #4a4d45;border-radius:50%;background:#151715;color:#f5f3ed;font-size:24px;cursor:pointer}
+.preview-stage{min-height:0;position:relative;background:
+linear-gradient(45deg,#151615 25%,transparent 25%,transparent 75%,#151615 75%),
+linear-gradient(45deg,#151615 25%,#101110 25%,#101110 75%,#151615 75%);
+background-size:22px 22px;background-position:0 0,11px 11px;padding:14px;overflow:hidden}
+.preview-stage iframe{width:100%;height:100%;border:0;border-radius:10px;background:white;box-shadow:0 15px 45px #0009}
+.preview-clone{width:100%;height:100%;display:grid;place-items:center;overflow:auto;padding:18px}
+.preview-clone>.piece-preview{width:min(1200px,100%);height:min(760px,100%);min-height:540px;border-radius:14px;box-shadow:0 20px 55px #000a;overflow:hidden}
+.preview-clone--brand>.piece-preview{width:min(1050px,100%)}.preview-clone--instagram>.piece-preview,.preview-clone--carousel>.piece-preview{width:min(1250px,100%)}.preview-clone--stories>.piece-preview{width:min(900px,100%)}
+.preview-clone .brand-card,.preview-clone .email-art,.preview-clone .ad-art,.preview-clone .manual-art{font-size:1.35em}
+.preview-clone .post-card{min-height:620px}.preview-clone .story-card{min-height:620px}
+.preview-command-bar{display:grid;grid-template-columns:230px minmax(0,1fr) 130px;gap:10px;align-items:center;padding:12px 16px;background:#101210;border-top:1px solid #393c36}
+.preview-command-copy{display:grid;gap:4px}.preview-command-copy b{font-size:10px;color:#d9ff00}.preview-command-copy span{font-size:7px;line-height:1.35;color:#8f938a}
+.preview-command-bar input{height:46px;border:1px solid #4a4d45;border-radius:9px;background:#181a18;color:#f4f3ed;padding:0 13px;font-size:11px;outline:0}.preview-command-bar input:focus{border-color:#d9ff00;box-shadow:0 0 0 2px #d9ff001c}.preview-command-bar .key{height:46px;margin:0}
+@media(max-width:800px){.preview-dialog{width:100vw;height:100vh;border-radius:0}.preview-shell{grid-template-rows:58px minmax(0,1fr) 130px}.preview-command-bar{grid-template-columns:1fr 110px}.preview-command-copy{grid-column:1/-1}.preview-clone>.piece-preview{min-height:450px}.monitor:after{opacity:.8}}
