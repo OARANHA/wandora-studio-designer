@@ -264,6 +264,7 @@ const server = http.createServer(async (req, res) => {
           sections:Array.isArray(plan.site?.sections)?plan.site.sections:[],
         },
         creativePlan:plan,
+        briefingFacts:plan.briefingFacts||currentV2.briefingFacts||{colors:[],palette:[],explicitColors:false},
       };
       const saved=await updateProject(session.email,projectId,{briefing:briefingText,v2:nextV2});
       return sendJson(res,200,{ok:true,plan:saved.v2?.creativePlan||plan,v2:saved.v2});
