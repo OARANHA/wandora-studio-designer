@@ -932,23 +932,9 @@ function renderSiteThumbnail(){
   const root=document.getElementById('site-preview'); if(!root)return;
   const hasSite=Object.keys(latestDecisions?.site||{}).length>0;
   if(!hasSite)return;
-  const frame=document.createElement('iframe');
-  frame.className='site-thumbnail-frame';
-  frame.title='Miniatura real do site';
-  frame.tabIndex=-1;
-  frame.setAttribute('aria-hidden','true');
-  frame.setAttribute('sandbox','allow-same-origin');
-  frame.srcdoc=buildSiteHtml(exportContext());
-  root.replaceChildren(frame);
-  const fit=()=>{
-    const w=root.clientWidth||1,h=root.clientHeight||1;
-    const scale=Math.min(w/1280,h/820);
-    frame.style.transform=`scale(${scale})`;
-    frame.style.left=`${Math.max(0,(w-1280*scale)/2)}px`;
-    frame.style.top=`${Math.max(0,(h-820*scale)/2)}px`;
-  };
-  requestAnimationFrame(fit);
-  frame.addEventListener('load',fit,{once:true});
+  // The dashboard uses a structural miniature (header → hero → content → CTA → footer).
+  // Clicking the monitor still opens the complete HTML site in the large preview dialog.
+  renderSite(latestDecisions,latestCopy,viewV2());
 }
 
 const PREVIEW_META=Object.freeze({
