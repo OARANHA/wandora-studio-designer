@@ -224,10 +224,12 @@ const server = http.createServer(async (req, res) => {
       const event=(name,data)=>{ if(!res.destroyed) res.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`); };
       event('start',{seq,total:QUESTION_TOTAL,groups:Object.keys(QUESTION_GROUPS)});
       const started=Date.now();
+      const collected={};
       const jobs=Object.entries(QUESTION_GROUPS).map(async([group,questions])=>{
         const t=Date.now();
         try {
           const result=await jevDecide({state,questions,signal:controller.signal});
+          collected[group]=result.answers||{};
           event('group',{seq,group,answers:result.answers,model:result.model||null,usage:result.usage||null,ms:Date.now()-t});
           return {group,ok:true};
         } catch(e) {
@@ -236,7 +238,19 @@ const server = http.createServer(async (req, res) => {
         }
       });
       const settled=await Promise.all(jobs);
-      if(!controller.signal.aborted){ event('done',{seq,ok:settled.every(x=>x.ok),groups:settled,ms:Date.now()-started}); res.end(); }
+      if(!controller.signal.aborted){
+        const decisionCount=Object.values(collected).reduce((n,g)=>n+Object.keys(g||{}).length,0);
+        const context=decisionCount?buildStudioContext({decisions:collected,briefing:text,brandName:''}):null;
+        event('done',{
+          seq,
+          ok:decisionCount===QUESTION_TOTAL,
+          decisionCount,
+          groups:settled,
+          context,
+          ms:Date.now()-started,
+        });
+        res.end();
+      }
       return;
     }
     if (path === '/api/v2/context' && req.method === 'POST') {
