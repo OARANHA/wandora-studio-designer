@@ -541,23 +541,41 @@ async function maybeAutoGenerateBriefingStory(text){
   if(!intent||!chutesImageReady)return false;
   const key=`${activeProject?.id||'new'}|${intent.slot}|${String(text||'').trim()}`;
   if(key===lastAutoBriefingMediaKey&&projectV2?.creativePlan?.assets?.some(a=>a?.slot===intent.slot&&a?.assetId))return false;
+
   const plan=await ensureCreativePlanForStory(text);
   const item=plan?.assets?.find(a=>a?.slot===intent.slot);
   if(!item)return false;
+
   status.textContent=`Gerando imagem real para ${intent.label}…`;
   projectV2={...projectV2,kitStatus:'generating'};updatePipeline();
-  const d=await json('/api/v2/media/revise-slot',{method:'POST',body:JSON.stringify({
-    projectId:activeProject.id,slot:intent.slot,instruction:text,
+
+  const d=await json('/api/v2/media/materialize-slot',{method:'POST',body:JSON.stringify({
+    projectId:activeProject.id,
+    slot:intent.slot,
+    instruction:text,
+    useJev:true,
   })});
-  projectV2={...projectV2,creativePlan:d.plan,briefingFacts:d.plan?.briefingFacts||projectV2.briefingFacts,kitStatus:d.plan?.status==='ready'?'ready':'generating'};
+
+  projectV2=d.v2||{
+    ...projectV2,
+    creativePlan:d.plan,
+    briefingFacts:d.plan?.briefingFacts||projectV2.briefingFacts,
+    studioContext:d.plan?.studioContext||projectV2.studioContext,
+    kitStatus:d.plan?.status==='ready'?'ready':'generating',
+  };
   activeProject={...activeProject,v2:projectV2};
   lastAutoBriefingMediaKey=key;
+
   renderAll(latestDecisions,latestCopy,viewV2());
   renderSiteThumbnail();
   if(previewDialog?.open&&activePreviewKind==='stories')renderPreviewContent('stories');
   updatePipeline();
-  status.textContent=`✓ ${intent.label} recebeu uma imagem do Chutes e foi atualizado.`;
-  return true;
+
+  const attached=projectV2?.creativePlan?.assets?.find(a=>a?.slot===intent.slot&&a?.assetId);
+  status.textContent=attached
+    ?`✓ ${intent.label} recebeu uma imagem real do Chutes.`
+    :`⚠ A geração terminou, mas ${intent.label} ainda não recebeu o asset.`;
+  return !!attached;
 }
 function localCreativeMediaIntent(text){
   const s=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
