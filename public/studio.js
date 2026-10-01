@@ -1214,13 +1214,25 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
       } else if(event==='done'){
         const total=Math.round(performance.now()-started);
         $('#latencia').textContent=`${total} ms`;
-        latestComplete=!!d.ok; liveUpdateCount+=latestComplete?1:0; refreshProjectButtons(); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
+        const decisionCount=Number(d.decisionCount)||Object.values(latestDecisions).reduce((n,g)=>n+Object.keys(g||{}).length,0);
+        latestComplete=decisionCount===89;
+        if(d.context&&typeof d.context==='object'){
+          projectV2={
+            ...projectV2,
+            studioContext:d.context,
+            briefingFacts:d.context.briefingFacts||projectV2.briefingFacts,
+          };
+          renderAll(latestDecisions,latestCopy,viewV2());
+          renderSiteThumbnail();
+          if(previewDialog?.open)renderPreviewContent(activePreviewKind);
+        }
+        liveUpdateCount+=latestComplete?1:0; refreshProjectButtons(); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
         status.textContent=live&&micWanted
-          ?`🎙️ Ouvindo… 89 decisões atualizadas em ${total} ms · atualização ${liveUpdateCount}. Continue falando.`
-          :latestComplete?'89 decisões prontas. Agora clique em “Gerar kit completo” para produzir textos, imagens e composições.':`Canais concluídos com ${failures} erro(s).`;
+          ?`🎙️ Ouvindo… ${decisionCount} decisões atualizadas em ${total} ms · atualização ${liveUpdateCount}. Continue falando.`
+          :latestComplete?'89 decisões prontas. Agora clique em “Gerar kit completo” para produzir textos, imagens e composições.':`Recebi ${decisionCount}/89 decisões; ${failures} canal(is) com erro.`;
       }
     });
-    if(Object.keys(latestDecisions).length){
+    if(Object.keys(latestDecisions).length&&!projectV2.studioContext){
       try{await refreshStudioContext(texto);}catch(e){status.textContent=`Decisões recebidas, mas o contexto do Studio falhou: ${e.message}`;}
     }
     if(latestComplete&&!live){
