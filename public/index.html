@@ -115,15 +115,15 @@
           <h1>Seu kit de marketing<br>pronto com <strong>o poder da sua voz.</strong></h1>
           <p>Você fala. A Wandora cria. Materiais profissionais, alinhados à sua marca, prontos para atrair mais clientes e gerar resultados.</p>
           <div class="hero-pipeline">
-            <div><i>✓</i><span>Briefing analisado</span></div><b>→</b>
-            <div><i>◌</i><span>Materiais gerados</span></div><b>→</b>
-            <div><i>✓</i><span>Kit completo</span></div>
+            <div id="pipeline-briefing" data-state="idle"><i>○</i><span>Briefing aguardando</span></div><b>→</b>
+            <div id="pipeline-materials" data-state="idle"><i>○</i><span>Materiais pendentes</span></div><b>→</b>
+            <div id="pipeline-kit" data-state="idle"><i>○</i><span>Kit pendente</span></div>
           </div>
         </div>
 
         <div class="hero-callout">
-          <b>Tudo pronto!</b>
-          <span>Edite, baixe ou gere novas versões com um simples comando.</span>
+          <b id="hero-callout-title">Conte sobre o negócio</b>
+          <span id="hero-callout-text">O Studio vai analisar o briefing antes de produzir o kit.</span>
         </div>
         <div class="hero-handwriting">Marketing<br>por voz.<br>Resultados<br>de verdade.</div>
       </section>
