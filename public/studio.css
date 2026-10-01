@@ -325,7 +325,7 @@ background-size:22px 22px;background-position:0 0,11px 11px;padding:14px;overflo
   background:
     linear-gradient(90deg,#0b0c0bdd 0 18%,#11120fd1 31%,#15110db8 54%,#2f1c13a5 100%),
     linear-gradient(0deg,#0008,transparent 42%),
-    url('/assets/wandora-login-hero-approved.webp') left center/cover no-repeat!important;
+    url('/brand/login.webp') left center/cover no-repeat!important;
 }
 .dashboard-hero .hero-mascot-wrap{visibility:hidden}
 .site .piece-preview{position:relative;overflow:hidden;background:#080908}
@@ -334,3 +334,39 @@ background-size:22px 22px;background-position:0 0,11px 11px;padding:14px;overflo
 .preview-mic{height:46px;border:1px solid #66705d;border-radius:9px;background:#171a15;color:#d9ff00;font:900 9px ui-monospace,monospace;cursor:pointer;box-shadow:inset 0 0 0 1px #d9ff000e}
 .preview-mic:hover{border-color:#d9ff00}.preview-mic.is-listening{background:#d9ff00;color:#090a08;box-shadow:0 0 18px #d9ff0055}
 @media(max-width:800px){.preview-command-bar{grid-template-columns:84px 1fr 100px}.preview-command-copy{grid-column:1/-1}.preview-mic{grid-column:1}}
+
+
+/* 2026-10-01 login viewport lock + canonical assets */
+.login-body{height:100dvh;min-height:100dvh;overflow:hidden!important}
+.login-shell{height:100dvh;min-height:100dvh;overflow:hidden!important;grid-template-rows:100dvh}
+.login-hero{height:100dvh!important;min-height:0!important;overflow:hidden!important}
+.login-hero-image{width:100%;height:100%;object-fit:cover;object-position:center center}
+.login-panel{height:100dvh;min-height:0!important;overflow:hidden!important;display:flex;flex-direction:column;justify-content:center;position:relative;padding:clamp(24px,3.4vh,54px) clamp(34px,3.2vw,64px)!important}
+.login-lang{top:clamp(16px,2.4vh,28px)!important}
+.login-brand-plate{width:min(500px,100%)!important;min-height:0;display:flex;align-items:center;justify-content:center}
+.login-brand-plate img{width:100%!important;height:auto!important;max-height:clamp(74px,11vh,112px)!important;object-fit:contain!important;object-position:center!important;display:block!important}
+.login-product{margin-top:clamp(4px,1vh,12px)!important}
+.login-panel h1{margin-top:clamp(18px,3vh,34px)!important;font-size:clamp(42px,6.2vh,68px)!important;line-height:.93!important}
+.login-panel .login-lead{margin:clamp(10px,1.8vh,18px) 0 clamp(16px,2.6vh,30px)!important;font-size:clamp(15px,1.9vh,18px)!important;line-height:1.45}
+.login-panel form{display:grid;gap:clamp(10px,1.5vh,16px)}
+.login-panel label{margin:0!important}
+.login-panel input{height:clamp(48px,6.2vh,58px)!important}
+.login-submit{height:clamp(50px,6.5vh,58px)!important;margin-top:0!important}
+.login-panel footer{margin-top:clamp(14px,2.5vh,32px)!important}
+@media(max-height:760px) and (min-width:791px){
+  .login-panel{padding-top:28px!important;padding-bottom:24px!important}
+  .login-brand-plate{width:min(390px,92%)!important}
+  .login-brand-plate img{max-height:78px!important}
+  .login-product{padding:5px 10px!important;font-size:9px!important}
+  .login-panel h1{font-size:44px!important;margin-top:18px!important}
+  .login-panel .login-lead{font-size:15px!important;margin:10px 0 16px!important}
+  .login-panel input{height:48px!important}
+  .login-submit{height:50px!important}
+  .login-panel footer{margin-top:14px!important}
+}
+@media(max-width:790px){
+  .login-body{height:auto;min-height:100dvh;overflow:auto!important}
+  .login-shell{display:block;height:auto;min-height:100dvh;overflow:visible!important}
+  .login-hero{height:42dvh!important;min-height:300px!important}
+  .login-panel{height:auto;min-height:58dvh!important;overflow:visible!important}
+}
