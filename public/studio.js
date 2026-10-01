@@ -17,7 +17,7 @@ const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGene
 const previewDialog=$('#preview-dialog'), previewTitle=$('#preview-title'), previewFrame=$('#preview-frame'), previewClone=$('#preview-clone'), previewCommand=$('#preview-command'), previewApplyBtn=$('#preview-apply'), previewExportBtn=$('#preview-export'), previewCloseBtn=$('#preview-close'), previewMicBtn=$('#preview-mic');
 const pipelineBriefing=$('#pipeline-briefing'), pipelineMaterials=$('#pipeline-materials'), pipelineKit=$('#pipeline-kit'), heroCalloutTitle=$('#hero-callout-title'), heroCalloutText=$('#hero-callout-text');
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, chutesImageReady=false, chutesVideoReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[], lastAutoBriefingMediaKey='';
-let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
+let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,studioContext:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
 let activePreviewKind='';
 function viewV2(){return {...projectV2,projectId:activeProject?.id||projectV2?.creativePlan?.projectId||''};}
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
@@ -75,6 +75,22 @@ function extractBriefingFactsLocal(text=''){
 }
 function syncBriefingFacts(text=briefing.value){
   projectV2={...projectV2,briefingFacts:extractBriefingFactsLocal(text)};
+}
+async function refreshStudioContext(text=briefing.value){
+  const d=await json('/api/v2/context',{method:'POST',body:JSON.stringify({
+    briefing:text,
+    decisions:latestDecisions,
+    brandName:activeProject?.clientName||'',
+  })});
+  projectV2={
+    ...projectV2,
+    studioContext:d.context,
+    briefingFacts:d.context?.briefingFacts||projectV2.briefingFacts,
+  };
+  renderAll(latestDecisions,latestCopy,viewV2());
+  renderSiteThumbnail();
+  if(previewDialog?.open)renderPreviewContent(activePreviewKind);
+  return d.context;
 }
 function setPipelineState(el,state,label){if(!el)return;el.dataset.state=state;const i=el.querySelector('i'),s=el.querySelector('span');if(i)i.textContent=state==='done'?'✓':state==='working'?'◌':'○';if(s&&label)s.textContent=label;}
 function updatePipeline(){
@@ -181,9 +197,9 @@ async function loadProjects(selectId=null){
   if(previous && d.projects.some(p=>p.id===previous)){
     projectSelect.value=previous; activeProject=d.projects.find(p=>p.id===previous);
     modelRouting=activeProject.modelRouting||{mode:'auto',selections:{}};
-    projectV2=activeProject.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
+    projectV2=activeProject.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,studioContext:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
   }
-  else if(!previous){ activeProject=null; projectSelect.value=''; modelRouting={mode:'auto',selections:{}}; projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; }
+  else if(!previous){ activeProject=null; projectSelect.value=''; modelRouting={mode:'auto',selections:{}}; projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,studioContext:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; }
   refreshProjectButtons();
 }
 async function createProject(){
@@ -191,15 +207,15 @@ async function createProject(){
   createProjectBtn.disabled=true;
   try{
     const d=await json('/api/projects',{method:'POST',body:JSON.stringify({name,clientName:clientName.value,briefing:briefing.value})});
-    activeProject=d.project; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; projectName.value=''; clientName.value=''; await loadProjects(d.project.id);
+    activeProject=d.project; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,studioContext:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; projectName.value=''; clientName.value=''; await loadProjects(d.project.id);
     status.textContent=`Projeto “${d.project.name}” criado.`;
   }catch(e){status.textContent=e.message;}finally{createProjectBtn.disabled=false;}
 }
 async function selectProject(){
   const id=projectSelect.value;
-  if(!id){activeProject=null;modelRouting={mode:'auto',selections:{}};projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};refreshProjectButtons();status.textContent='Novo projeto: dê um nome e crie quando quiser salvar versões.';return;}
+  if(!id){activeProject=null;modelRouting={mode:'auto',selections:{}};projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,studioContext:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};refreshProjectButtons();status.textContent='Novo projeto: dê um nome e crie quando quiser salvar versões.';return;}
   try{
-    const d=await json(`/api/projects/${id}`); activeProject=d.project; briefing.value=d.project.briefing||''; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; resetSignals(); refreshProjectButtons();
+    const d=await json(`/api/projects/${id}`); activeProject=d.project; briefing.value=d.project.briefing||''; modelRouting=d.project.modelRouting||{mode:'auto',selections:{}}; projectV2=d.project.v2||{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,studioContext:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}; resetSignals(); refreshProjectButtons();
     status.textContent=`Projeto “${d.project.name}” carregado · ${d.project.versionCount||0} versão(ões) · modelos ${modelRouting.mode}.`;
   }catch(e){status.textContent=e.message;}
 }
@@ -494,9 +510,9 @@ async function ensureCreativePlanForStory(text){
   const materials=[...new Set([...(existing?.deliverables||projectV2?.materials||[]),'stories'])];
   status.textContent='Preparando o Story no plano criativo…';
   const planned=await json('/api/v2/creative-plan',{method:'POST',body:JSON.stringify({
-    projectId:activeProject.id,briefing:text,materials,useJev:true,
+    projectId:activeProject.id,briefing:text,materials,decisions:latestDecisions,studioContext:projectV2.studioContext,useJev:true,
   })});
-  projectV2=planned.v2||{...projectV2,creativePlan:planned.plan,materials,kitStatus:'planning'};
+  projectV2=planned.v2||{...projectV2,creativePlan:planned.plan,studioContext:planned.plan?.studioContext||projectV2.studioContext,materials,kitStatus:'planning'};
   activeProject={...activeProject,v2:projectV2};
   return projectV2.creativePlan;
 }
@@ -839,9 +855,9 @@ async function generateCompleteKit(){
 
     kitStatus.textContent='3/5 · Diretor Criativo montando composição, nicho e plano de mídia…';
     const planned=await json('/api/v2/creative-plan',{method:'POST',body:JSON.stringify({
-      projectId:activeProject.id,briefing:briefing.value,materials,decisions:latestDecisions,copy:latestCopy,useJev:true,
+      projectId:activeProject.id,briefing:briefing.value,materials,decisions:latestDecisions,copy:latestCopy,studioContext:projectV2.studioContext,useJev:true,
     })});
-    projectV2=planned.v2||{...projectV2,materials,creativePlan:planned.plan,briefingFacts:planned.plan?.briefingFacts||projectV2.briefingFacts,kitStatus:'planning'};
+    projectV2=planned.v2||{...projectV2,materials,creativePlan:planned.plan,studioContext:planned.plan?.studioContext||projectV2.studioContext,briefingFacts:planned.plan?.briefingFacts||projectV2.briefingFacts,kitStatus:'planning'};
     updatePipeline();
     activeProject={...activeProject,v2:projectV2};
 
@@ -1170,6 +1186,7 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
   texto=String(texto||'').trim();
   if(texto.split(/\s+/).filter(Boolean).length<2)return;
   syncBriefingFacts(texto);
+  projectV2={...projectV2,studioContext:null};
   copyController?.abort(); copyGenerating=false;
   const controller=new AbortController(); activeController=controller;
   latestCopy={}; latestComplete=false; latestVariation=[]; refreshProjectButtons();
@@ -1197,12 +1214,15 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
       } else if(event==='done'){
         const total=Math.round(performance.now()-started);
         $('#latencia').textContent=`${total} ms`;
-        latestComplete=d.ok&&decisions===89; liveUpdateCount+=latestComplete?1:0; refreshProjectButtons(); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
+        latestComplete=!!d.ok; liveUpdateCount+=latestComplete?1:0; refreshProjectButtons(); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
         status.textContent=live&&micWanted
           ?`🎙️ Ouvindo… 89 decisões atualizadas em ${total} ms · atualização ${liveUpdateCount}. Continue falando.`
           :latestComplete?'89 decisões prontas. Agora clique em “Gerar kit completo” para produzir textos, imagens e composições.':`Canais concluídos com ${failures} erro(s).`;
       }
     });
+    if(Object.keys(latestDecisions).length){
+      try{await refreshStudioContext(texto);}catch(e){status.textContent=`Decisões recebidas, mas o contexto do Studio falhou: ${e.message}`;}
+    }
     if(latestComplete&&!live){
       try{await maybeAutoGenerateBriefingStory(texto);}catch(e){status.textContent=`Briefing analisado, mas a imagem do Story falhou: ${e.message}`;}
     }
