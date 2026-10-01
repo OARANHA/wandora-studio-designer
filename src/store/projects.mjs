@@ -27,24 +27,45 @@ function cleanModelRouting(value = {}) {
   const selections={};
   if(value?.selections&&typeof value.selections==='object'&&!Array.isArray(value.selections)){
     for(const [task,key] of Object.entries(value.selections)){
-      if(!['briefing','copy','brand','layout','review','image','video'].includes(task))continue;
+      if(!['intent','briefing','creative_plan','copy','brand','layout','review','image','video'].includes(task))continue;
       const v=cleanText(key,180); if(v)selections[task]=v;
     }
   }
   return {mode,selections};
+}
+function cleanCreativePlan(value) {
+  if(!value || typeof value!=='object' || Array.isArray(value))return null;
+  const raw=safeJsonSize(value,140_000,'Plano criativo');
+  const plan=JSON.parse(raw);
+  if(plan.schema!==1)plan.schema=1;
+  if(Array.isArray(plan.assets)){
+    plan.assets=plan.assets.slice(0,24).map(a=>({
+      id:cleanText(a?.id,80),slot:cleanText(a?.slot,100),kind:cleanText(a?.kind,30),role:cleanText(a?.role,50),
+      required:a?.required!==false,auto:a?.auto!==false,status:['planned','generating','ready','failed','attached'].includes(a?.status)?a.status:'planned',
+      prompt:String(a?.prompt||'').trim().slice(0,2200),negativePrompt:String(a?.negativePrompt||'').trim().slice(0,1200),
+      width:Math.min(1536,Math.max(256,Number(a?.width)||1024)),height:Math.min(1536,Math.max(256,Number(a?.height)||1024)),aspect:cleanText(a?.aspect,20),
+      assetId:/^[0-9a-f-]{36}$/i.test(String(a?.assetId||''))?String(a.assetId):null,
+      contentUrl:String(a?.contentUrl||'').startsWith('/api/projects/')?String(a.contentUrl).slice(0,360):null,
+      error:cleanText(a?.error,300)||null,
+    })).filter(a=>a.id&&a.slot);
+  } else plan.assets=[];
+  plan.projectId=/^[0-9a-f-]{36}$/i.test(String(plan.projectId||''))?String(plan.projectId):'';
+  plan.status=['planned','generating','partial','ready'].includes(plan.status)?plan.status:'planned';
+  return plan;
 }
 function cleanV2(value = {}) {
   const materials=Array.isArray(value?.materials)?value.materials.map(v=>cleanText(v,40)).filter(Boolean).slice(0,20):[];
   const kitStatus=['draft','planning','generating','ready'].includes(value?.kitStatus)?value.kitStatus:'draft';
   const raw=value?.siteStructure&&typeof value.siteStructure==='object'?value.siteStructure:{};
   const heroRaw=raw.hero&&typeof raw.hero==='object'?raw.hero:{};
-  const variants=new Set(['split','centered','mascot_right','dashboard_right','editorial']);
+  const variants=new Set(['split','centered','mascot_right','dashboard_right','editorial','illustration','full_background','product','video']);
   const allowedSections=new Set(['benefits','proof','features','process','gallery','pricing','faq','lead','cta','footer']);
   const siteStructure={
     hero:{enabled:heroRaw.enabled!==false,variant:variants.has(heroRaw.variant)?heroRaw.variant:'split'},
     sections:Array.isArray(raw.sections)?raw.sections.map(x=>cleanText(typeof x==='string'?x:x?.id,40)).filter(x=>allowedSections.has(x)).filter((x,i,a)=>a.indexOf(x)===i).slice(0,12):[],
   };
-  return {kitStatus,materials,siteStructure};
+  const creativePlan=cleanCreativePlan(value?.creativePlan);
+  return {kitStatus,materials,siteStructure,creativePlan};
 }
 async function readJsonFile(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
@@ -83,7 +104,7 @@ export async function createProject({ owner, name, clientName = '', briefing = '
     const now = new Date().toISOString();
     const project = {
       id: randomUUID(), owner, name: projectName, clientName: cleanText(clientName, 120),
-      briefing: String(briefing ?? '').trim().slice(0, 5000), modelRouting:{mode:'auto',selections:{}}, v2:{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}}, createdAt: now, updatedAt: now, versionCount: 0,
+      briefing: String(briefing ?? '').trim().slice(0, 5000), modelRouting:{mode:'auto',selections:{}}, v2:{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null}, createdAt: now, updatedAt: now, versionCount: 0,
     };
     doc.projects.push(project);
     await atomicJson(INDEX, doc);
@@ -116,7 +137,7 @@ export async function updateProject(owner, id, patch = {}) {
     if ('modelRouting' in patch) next.modelRouting = cleanModelRouting(patch.modelRouting);
     if ('v2' in patch) next.v2 = cleanV2(patch.v2);
     if (!next.modelRouting) next.modelRouting={mode:'auto',selections:{}};
-    if (!next.v2) next.v2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]}};
+    if (!next.v2) next.v2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null};
     next.updatedAt = new Date().toISOString();
     doc.projects[i] = next;
     await atomicJson(INDEX, doc);

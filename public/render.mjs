@@ -101,6 +101,16 @@ function setPalette(root,colors){
   root.style.setProperty('--p1',colors[0]); root.style.setProperty('--p2',colors[1]);
   root.style.setProperty('--p3',colors[2]); root.style.setProperty('--p4',colors[3]); root.style.setProperty('--p5',colors[4]);
 }
+function creativeAsset(v2={},slot=''){
+  const assets=v2?.creativePlan?.assets;
+  return Array.isArray(assets)?assets.find(a=>a?.slot===slot&&a?.assetId):null;
+}
+function creativeAssetUrl(v2={},slot=''){
+  const a=creativeAsset(v2,slot); if(!a)return '';
+  if(typeof a.contentUrl==='string'&&a.contentUrl.startsWith('/api/projects/'))return a.contentUrl;
+  const projectId=v2?.projectId||v2?.creativePlan?.projectId;
+  return projectId?`/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(a.assetId)}/content`:'';
+}
 function empty(root,label,sub){
   root.replaceChildren(); const box=node('div','piece-empty'); box.append(node('b','',label),node('span','',sub)); root.append(box);
 }
@@ -135,7 +145,12 @@ export function renderSite(decisions,copy={},v2={}){
     copyBox.append(node('small','',labelKey(choice(decisions?.entender?.seg)||'negócio')),node('h2','',title),node('p','',textCopy(copy,'site.subheadline','Estratégia, personalidade e uma experiência visual coerente do primeiro contato à conversão.')));
     const button=node('button','site-cta',textCopy(copy,'site.cta',CTA[choice(d.cta)]||'Conhecer agora')); button.type='button';
     copyBox.append(button);
-    const art=node('div',`site-object site-object--${choice(d.img)||'flat'}`); art.append(node('i'),node('i'),node('i'));
+    const art=node('div',`site-object site-object--${choice(d.img)||'flat'}`);
+    const heroSlot=v2?.creativePlan?.site?.hero?.assetSlot||'site.hero';
+    const heroImage=creativeAssetUrl(v2,heroSlot);
+    if(heroImage){
+      const img=node('img','site-object-media');img.src=heroImage;img.alt='';img.loading='eager';art.append(img);art.classList.add('site-object--generated');
+    }else art.append(node('i'),node('i'),node('i'));
     if(heroVariant==='mascot_right')art.classList.add('site-object--mascot');
     if(heroVariant==='dashboard_right')art.classList.add('site-object--dashboard');
     hero.append(copyBox,art); shell.append(nav,hero);
@@ -172,21 +187,24 @@ export function renderEmail(decisions,copy={}){
   const sig=node('div','email-signature'); sig.append(node('i','', (textCopy(copy,'brand.name','W')).slice(0,1)),node('span','',textCopy(copy,'email.signature','Equipe · relacionamento e atendimento')));
   mail.append(bar,body,sig); root.append(mail);
 }
-export function renderStories(decisions,copy={}){
+export function renderStories(decisions,copy={},v2={}){
   const root=document.getElementById('stories-preview'); if(!root)return;
   const d=decisions?.posts; if(!d){empty(root,'9:16','Stories derivados da campanha');return;}
   const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
-  const titles=[
-    textCopy(copy,'posts.presentation.title','Conheça a marca'),
-    textCopy(copy,'posts.sales.title','Oferta em destaque'),
-    textCopy(copy,'posts.relationship.title','Fale com a gente'),
+  const planned=Array.isArray(v2?.creativePlan?.stories?.items)?v2.creativePlan.stories.items:[];
+  const defaults=[
+    {type:'presentation',headline:textCopy(copy,'posts.presentation.title','Conheça a marca'),cta:'Toque para conhecer',assetSlot:'stories.01'},
+    {type:'offer',headline:textCopy(copy,'posts.sales.title','Oferta em destaque'),cta:'Arraste para saber mais',assetSlot:'stories.02'},
+    {type:'relationship',headline:textCopy(copy,'posts.relationship.title','Fale com a gente'),cta:'Responda este story',assetSlot:'stories.03'},
   ];
-  const labels=['APRESENTAÇÃO','VENDA','RELACIONAMENTO'];
-  titles.forEach((title,i)=>{
+  const labels={presentation:'APRESENTAÇÃO',offer:'VENDA',authority:'AUTORIDADE',tip:'DICA',testimonial:'PROVA',cta:'CHAMADA',relationship:'RELACIONAMENTO',product:'PRODUTO'};
+  defaults.map((fallback,i)=>({...fallback,...(planned[i]||{}),headline:(planned[i]?.headline||fallback.headline)})).forEach((item,i)=>{
     const card=node('article',`story-card story-card--${i+1}`);
-    const top=node('div','story-top'); top.append(node('small','',`0${i+1} · ${labels[i]}`),node('i','',i===1?'▶':'W'));
-    const body=node('div','story-body'); body.append(node('strong','',title),node('span','',i===0?'Toque para conhecer':i===1?'Arraste para saber mais':'Responda este story'));
-    const foot=node('div','story-foot','ENVIAR MENSAGEM');
+    const bg=creativeAssetUrl(v2,item.assetSlot||`stories.${String(i+1).padStart(2,'0')}`);
+    if(bg){card.classList.add('story-card--media');card.style.backgroundImage=`linear-gradient(180deg,rgba(6,7,6,.16),rgba(6,7,6,.82)),url("${bg}")`;card.style.backgroundSize='cover';card.style.backgroundPosition='center';}
+    const top=node('div','story-top'); top.append(node('small','',`0${i+1} · ${labels[item.type]||String(item.type||'STORY').toUpperCase()}`),node('i','',i===1?'▶':'W'));
+    const body=node('div','story-body'); body.append(node('strong','',item.headline||fallback.headline),node('span','',item.cta||fallback.cta));
+    const foot=node('div','story-foot',String(item.cta||'ENVIAR MENSAGEM').toUpperCase());
     card.append(top,body,foot); root.append(card);
   });
 }
@@ -215,5 +233,5 @@ export function renderAds(decisions,copy={}){
   const b=node('button','ad-cta',textCopy(copy,'ads.cta',CTA[choice(d.ad_cta)]||'Saiba mais'));b.type='button';ad.append(b);root.append(ad);
 }
 export function renderAll(decisions={},copy={},v2={}){
-  renderBrand(decisions,copy); renderSite(decisions,copy,v2); renderPosts(decisions,copy); renderStories(decisions,copy); renderEmail(decisions,copy); renderAds(decisions,copy); renderManual(decisions,copy,v2);
+  renderBrand(decisions,copy); renderSite(decisions,copy,v2); renderPosts(decisions,copy); renderStories(decisions,copy,v2); renderEmail(decisions,copy); renderAds(decisions,copy); renderManual(decisions,copy,v2);
 }

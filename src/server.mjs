@@ -17,6 +17,7 @@ import { createProject, createVersion, getProject, getVersion, listProjects, lis
 import { assetLimits, deleteAsset, listAssets, putAsset, readAsset } from './store/assets.mjs';
 import { ROUTE_QUESTIONS, TARGETS, commandQuestions, commandState, routeResult, routeState } from './commands/router.mjs';
 import { routeSiteStructure } from './v2/site-structure.mjs';
+import { planCreativeProject } from './creative/creative-plan.mjs';
 
 assertProductionConfig();
 const here = dirname(fileURLToPath(import.meta.url));
@@ -235,6 +236,36 @@ const server = http.createServer(async (req, res) => {
       const settled=await Promise.all(jobs);
       if(!controller.signal.aborted){ event('done',{seq,ok:settled.every(x=>x.ok),groups:settled,ms:Date.now()-started}); res.end(); }
       return;
+    }
+    if (path === '/api/v2/creative-plan' && req.method === 'POST') {
+      const body=await readJson(req,160_000);
+      const projectId=String(body.projectId||'');
+      const project=await getProject(session.email,projectId);
+      const briefingText=String(body.briefing||project.briefing||'').trim().slice(0,5000);
+      if(briefingText.split(/\s+/).filter(Boolean).length<2) throw new HttpError(400,'Descreva o negócio antes de criar o plano criativo.','creative_plan_briefing_required');
+      const materials=Array.isArray(body.materials)?body.materials:(project.v2?.materials||[]);
+      const plan=await planCreativeProject({projectId,briefing:briefingText,materials,useJev:body.useJev!==false});
+      const heroMap={
+        'hero-split-image':'split',
+        'hero-full-background':'full_background',
+        'hero-editorial':'editorial',
+        'hero-illustration':'illustration',
+        'hero-product':'product',
+        'hero-video':'video',
+      };
+      const currentV2=project.v2&&typeof project.v2==='object'?project.v2:{};
+      const nextV2={
+        ...currentV2,
+        kitStatus:'planning',
+        materials:plan.deliverables,
+        siteStructure:{
+          hero:{enabled:plan.deliverables.includes('site'),variant:heroMap[plan.site?.hero?.composition]||'split'},
+          sections:Array.isArray(plan.site?.sections)?plan.site.sections:[],
+        },
+        creativePlan:plan,
+      };
+      const saved=await updateProject(session.email,projectId,{briefing:briefingText,v2:nextV2});
+      return sendJson(res,200,{ok:true,plan:saved.v2?.creativePlan||plan,v2:saved.v2});
     }
     if (path === '/api/v2/media/image' && req.method === 'POST') {
       const body=await readJson(req,50_000);

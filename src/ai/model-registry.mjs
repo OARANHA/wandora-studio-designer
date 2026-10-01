@@ -3,7 +3,9 @@ import { HttpError } from '../lib/http.mjs';
 import { jevDecide } from './jev.mjs';
 
 const TASKS=Object.freeze({
+  intent:{label:'Intenção / Roteamento',needs:['text'],priority:['speed','structured']},
   briefing:{label:'Entendimento',needs:['text'],priority:['speed','structured']},
+  creative_plan:{label:'Direção Criativa / Planner',needs:['text'],priority:['reasoning','quality','creativity']},
   copy:{label:'Copy / Writer',needs:['text'],priority:['quality','creativity']},
   brand:{label:'Marca / Estratégia',needs:['text'],priority:['quality','creativity']},
   layout:{label:'Site / Layout',needs:['text'],priority:['structured','quality']},
@@ -13,7 +15,12 @@ const TASKS=Object.freeze({
 });
 
 const STATIC_CHUTES_META={
-  'Kimi-K3-TEE':{label:'Kimi K3',input:['text','image','video'],strengths:['copy','brand','review'],speed:'medium',cost:'high'},
+  'deepseek-ai/DeepSeek-V3.2-TEE':{label:'DeepSeek V3.2',input:['text'],strengths:['copy','brand','review','creative_plan'],speed:'medium',cost:'medium'},
+  'moonshotai/Kimi-K3-TEE':{label:'Kimi K3',input:['text','image','video'],strengths:['brand','review','creative_plan'],speed:'medium',cost:'high'},
+  'Qwen/Qwen3-235B-A22B-Thinking-2507-TEE':{label:'Qwen3 235B Thinking',input:['text'],strengths:['creative_plan','brand','layout','review'],speed:'slow',cost:'high'},
+  'Qwen/Qwen3-32B-TEE':{label:'Qwen3 32B',input:['text'],strengths:['intent','briefing','layout','review'],speed:'fast',cost:'low'},
+  'zai-org/GLM-5.2-TEE:latency':{label:'GLM 5.2 Latency',input:['text'],strengths:['copy','brand','layout','review'],speed:'fast',cost:'medium'},
+  'Kimi-K3-TEE':{label:'Kimi K3',input:['text','image','video'],strengths:['copy','brand','review','creative_plan'],speed:'medium',cost:'high'},
   'Kimi-K2.6-TEE':{label:'Kimi K2.6',input:['text','image','video'],strengths:['copy','brand','review'],speed:'medium',cost:'medium'},
   'DeepSeek-V4-Flash-0731-TEE':{label:'DeepSeek V4 Flash',input:['text'],strengths:['briefing','layout','review'],speed:'fast',cost:'low'},
   'Qwen3.8-27B-TEE':{label:'Qwen 3.8 27B',input:['text','image'],strengths:['copy','layout','review'],speed:'medium',cost:'medium'},
@@ -92,17 +99,25 @@ function candidatesForTask(models,task){
   });
 }
 function fallbackRank(candidates,task){
+  const preferredIds={
+    intent:['Qwen/Qwen3-32B-TEE','DeepSeek-V4-Flash-0731-TEE'],
+    briefing:['Qwen/Qwen3-32B-TEE'],
+    creative_plan:['Qwen/Qwen3-235B-A22B-Thinking-2507-TEE','moonshotai/Kimi-K3-TEE','deepseek-ai/DeepSeek-V3.2-TEE'],
+    copy:['deepseek-ai/DeepSeek-V3.2-TEE','zai-org/GLM-5.2-TEE:latency'],
+    brand:['deepseek-ai/DeepSeek-V3.2-TEE','moonshotai/Kimi-K3-TEE'],
+    layout:['Qwen/Qwen3-235B-A22B-Thinking-2507-TEE','Qwen/Qwen3-32B-TEE'],
+    review:['Qwen/Qwen3-235B-A22B-Thinking-2507-TEE','zai-org/GLM-5.2-TEE:latency'],
+  };
+  const ids=preferredIds[task]||[];
   const preferredByTask={
-    briefing:['nvidia'],
-    layout:['nvidia'],
-    copy:['chutes','nvidia'],
-    brand:['chutes','nvidia'],
-    review:['chutes','nvidia'],
-    image:['chutes-media'],
-    video:['chutes-media'],
+    intent:['chutes','nvidia'],briefing:['chutes','nvidia'],creative_plan:['chutes','nvidia'],
+    layout:['chutes','nvidia'],copy:['chutes','nvidia'],brand:['chutes','nvidia'],review:['chutes','nvidia'],
+    image:['chutes-media'],video:['chutes-media'],
   };
   const order=preferredByTask[task]||[];
   return [...candidates].sort((a,b)=>{
+    const ia=ids.indexOf(a.id),ib=ids.indexOf(b.id);
+    if((ia<0?99:ia)!==(ib<0?99:ib))return (ia<0?99:ia)-(ib<0?99:ib);
     const pa=order.indexOf(a.provider),pb=order.indexOf(b.provider);
     return (pa<0?99:pa)-(pb<0?99:pb);
   })[0]||null;

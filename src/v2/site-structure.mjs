@@ -52,6 +52,10 @@ const QUESTIONS=Object.freeze({
       mascot_right:'Texto à esquerda e mascote/visual de marca à direita',
       dashboard_right:'Texto à esquerda e mockup/dashboard à direita',
       editorial:'Composição editorial com título grande e hierarquia forte',
+      illustration:'Hero com ilustração/desenho como visual principal',
+      full_background:'Imagem ocupando o fundo completo com texto sobreposto',
+      product:'Produto como protagonista visual do hero',
+      video:'Vídeo ou cena em movimento como visual principal',
     },
   },
 });
@@ -77,7 +81,7 @@ export function normalizeSiteStructure(value={}){
   const sections=Array.isArray(value?.sections)?value.sections:[];
   const valid=new Set(Object.keys(SITE_SECTION_LABELS).filter(x=>x!=='hero'));
   return {
-    hero:{enabled:hero.enabled!==false,variant:['split','centered','mascot_right','dashboard_right','editorial'].includes(hero.variant)?hero.variant:'split'},
+    hero:{enabled:hero.enabled!==false,variant:['split','centered','mascot_right','dashboard_right','editorial','illustration','full_background','product','video'].includes(hero.variant)?hero.variant:'split'},
     sections:sections.map(s=>typeof s==='string'?s:s?.id).filter(id=>valid.has(id)).filter((id,i,a)=>a.indexOf(id)===i).slice(0,12),
   };
 }
