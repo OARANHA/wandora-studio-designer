@@ -25,7 +25,7 @@ const PUBLIC = join(here, '..', 'public');
 
 function loginPage(error = '') {
   const msg = error === 'limite' ? 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' : error ? 'E-mail ou senha incorretos.' : '';
-  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css?v=20261001-loginfix1"></head>
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#090a09"><title>Entrar · Wandora Studio Designer</title><link rel="stylesheet" href="/studio.css?v=20261001-approvedhero1"></head>
   <body class="login-body">
     <main class="login-shell">
       <section class="login-hero login-hero-approved" aria-hidden="true">
