@@ -159,7 +159,7 @@ export function buildCreativePlanFromSignals({projectId='',briefing='',materials
     storyItems.forEach((item,i)=>addAsset(item.assetSlot,pack.storySubjects[i]||pack.subject,'photography'));
   }
   if(deliverables.includes('ads')&&!deliverables.includes('site')&&!deliverables.includes('stories'))addAsset('ads.primary',pack.subject,'photography');
-  const sections=[...new Set(pack.sections)];
+  const sections=[...new Set(Array.isArray(context?.site?.sections)&&context.site.sections.length?context.site.sections:pack.sections)];
   return {
     schema:1,
     projectId:String(projectId||''),
