@@ -524,7 +524,6 @@ async function maybeAutoGenerateBriefingStory(text){
   return true;
 }
 function localCreativeMediaIntent(text){
-  if(!projectV2?.creativePlan?.assets?.length)return null;
   const s=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   const change=/\b(troca|trocar|muda|mudar|substitui|substituir|refaz|refazer|gera|gerar|coloca|colocar|quero|deixa|deixar)\b/.test(s);
   const visual=/\b(imagem|foto|fundo|desenho|ilustracao|visual|cena|ambiente|pessoa|mulher|homem|produto|oculos|relogio|parede|academia|clinica)\b/.test(s);
@@ -536,14 +535,18 @@ function localCreativeMediaIntent(text){
     else if(/\b(3|03|terceiro|terceira)\b/.test(s))n=3;
     else if(/\b(1|01|primeiro|primeira)\b/.test(s))n=1;
     const slot=`stories.${String(n).padStart(2,'0')}`;
-    if(projectV2.creativePlan.assets.some(a=>a?.slot===slot))return {slot,label:`Story ${n}`};
+    return {slot,label:`Story ${n}`};
   }
   return null;
 }
 async function tryCreativeMediaCommand(comando){
   const intent=localCreativeMediaIntent(comando);
   if(!intent)return false;
-  if(!activeProject)return false;
+  if(!activeProject)await ensureActiveProjectForKit();
+  if(intent.slot.startsWith('stories.')&&!projectV2?.creativePlan?.assets?.some(a=>a?.slot===intent.slot)){
+    await ensureCreativePlanForStory(`${briefing.value}\nAjuste solicitado: ${comando}`);
+  }
+  if(!projectV2?.creativePlan?.assets?.some(a=>a?.slot===intent.slot))return false;
   if(!chutesImageReady){
     status.textContent=`Entendi a mudança visual em ${intent.label}, mas o Chutes de imagem ainda não está conectado neste servidor.`;
     return true;
