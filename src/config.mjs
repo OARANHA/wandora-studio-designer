@@ -16,19 +16,19 @@ export const config = Object.freeze({
   devPassword: process.env.STUDIO_DEV_PASSWORD || 'wandora-dev-only',
   jev: {
     baseUrl: (process.env.JEV_BASE_URL || 'https://api.typesafe.ai').replace(/\/$/, ''),
-    [REDACTED] || '',
+    apiKey: process.env.JEV_API_KEY || '',
     model: process.env.JEV_MODEL || 'jev-latest',
     timeoutMs: int('JEV_TIMEOUT_MS', 20_000, 1_000, 60_000),
   },
   nvidia: {
     baseUrl: (process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1').replace(/\/$/, ''),
-    [REDACTED] || '',
+    apiKey: process.env.NVIDIA_API_KEY || '',
     model: process.env.NVIDIA_MODEL || 'openai/gpt-oss-20b',
     timeoutMs: int('NVIDIA_TIMEOUT_MS', 120_000, 5_000, 180_000),
   },
   chutes: {
     baseUrl: (process.env.CHUTES_BASE_URL || 'https://llm.chutes.ai/v1').replace(/\/$/, ''),
-    [REDACTED] || '',
+    apiKey: process.env.CHUTES_API_KEY || '',
     timeoutMs: int('CHUTES_TIMEOUT_MS', 60_000, 5_000, 180_000),
     imageUrl: (process.env.CHUTES_IMAGE_URL || 'https://vonkaiser-qwen-image-2512.chutes.ai/generate').trim(),
     imageModel: (process.env.CHUTES_IMAGE_MODEL || 'Qwen/Qwen-Image-2512').trim(),
