@@ -1,10 +1,10 @@
 export function createDecisionScheduler({
   getText,
   run,
-  debounceMs=650,
-  maxWaitMs=1300,
+  debounceMs=1000,
+  maxWaitMs=2800,
   minWords=2,
-  afterBusyMs=20,
+  afterBusyMs=180,
   setTimeoutFn=setTimeout,
   clearTimeoutFn=clearTimeout,
 }){
@@ -158,9 +158,9 @@ export async function createBackendVoiceCapture(vu,{
   onSpeech,
   onSegment,
   onError,
-  silenceMs=460,
-  maxSegmentMs=1800,
-  minSegmentMs=320,
+  silenceMs=320,
+  maxSegmentMs=2600,
+  minSegmentMs=420,
   outputRate=16000,
 }={}){
   if(!navigator.mediaDevices?.getUserMedia)throw new Error('media_devices_unavailable');
@@ -201,6 +201,10 @@ export async function createBackendVoiceCapture(vu,{
     chunks=keep?.length?[keep]:[];totalSamples=keep?.length||0;silentSamples=0;
     if(!forced)speaking=false;
     if(raw.length<minSegmentSamples)return;
+    let energy=0,segmentPeak=0;
+    for(const v of raw){energy+=v*v;segmentPeak=Math.max(segmentPeak,Math.abs(v));}
+    const segmentRms=Math.sqrt(energy/raw.length);
+    if(segmentRms<Math.max(.011,noiseFloor*1.45)&&segmentPeak<.04)return;
     const pcm=downsampleMono(raw,ctx.sampleRate,outputRate), wav=encodeWav16Mono(pcm,outputRate);
     queue=queue.then(()=>onSegment?.(wav,{durationMs,forced})).catch(e=>onError?.(e));
   };
@@ -212,20 +216,20 @@ export async function createBackendVoiceCapture(vu,{
     for(const v of frame){sum+=v*v;peak=Math.max(peak,Math.abs(v));}
     const rms=Math.sqrt(sum/frame.length);
     if(!speaking){
-      if(rms<.02)noiseFloor=noiseFloor*.96+rms*.04;
-      const threshold=Math.max(.011,noiseFloor*2.8);
-      if(rms>threshold&&peak>.025)above++;else above=Math.max(0,above-1);
+      if(rms<.028)noiseFloor=noiseFloor*.965+rms*.035;
+      const threshold=Math.max(.016,noiseFloor*3.4);
+      if(rms>threshold&&peak>.045)above++;else above=Math.max(0,above-1);
       pre.push(frame);
       let preSamples=pre.reduce((n,a)=>n+a.length,0);
       while(pre.length>1&&preSamples>maxPreSamples){preSamples-=pre[0].length;pre.shift();}
-      if(above>=2){
+      if(above>=4){
         speaking=true;onSpeech?.({rms,peak});
         chunks=pre.splice(0);totalSamples=chunks.reduce((n,a)=>n+a.length,0);silentSamples=0;above=0;
       }
       return;
     }
     chunks.push(frame);totalSamples+=frame.length;
-    const threshold=Math.max(.009,noiseFloor*2.1);
+    const threshold=Math.max(.012,noiseFloor*2.5);
     if(rms<threshold)silentSamples+=frame.length;else silentSamples=0;
     if(silentSamples>=silenceSamplesMax)emit(false);
     else if(totalSamples>=maxSegmentSamples)emit(true);
