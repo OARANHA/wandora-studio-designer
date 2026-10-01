@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { loginHeroWebp, wandoraLogoWebp } from './brand-assets.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -70,6 +71,15 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'self'");
 
     if (path === '/healthz') return sendJson(res, 200, { ok:true, app:'wandora-studio-designer', version:'0.1.0' });
+    if (path === '/brand/login-hero.webp') {
+      res.writeHead(200,{'content-type':'image/webp','content-length':loginHeroWebp.length,'cache-control':'public, max-age=31536000, immutable','x-content-type-options':'nosniff'});
+      return res.end(loginHeroWebp);
+    }
+    if (path === '/brand/logo.webp') {
+      res.writeHead(200,{'content-type':'image/webp','content-length':wandoraLogoWebp.length,'cache-control':'public, max-age=31536000, immutable','x-content-type-options':'nosniff'});
+      return res.end(wandoraLogoWebp);
+    }
+
     if (path === '/brand/login.webp' || path === '/brand/logo.webp') {
       const name=path.endsWith('login.webp')?'login.webp':'logo.webp';
       try{
