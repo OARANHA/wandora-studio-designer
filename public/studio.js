@@ -58,6 +58,7 @@ function renderGroupSummary(group,answers,ms=0){
   draw?.(latestDecisions,latestCopy,projectV2);
   if(group==='posts')renderStories(latestDecisions,latestCopy);
   if(group==='marca')renderManual(latestDecisions,latestCopy,projectV2);
+  if(group==='site')renderSiteThumbnail();
   if(previewDialog?.open){
     const relevant={site:['site'],brand:['marca'],instagram:['posts'],carousel:['posts'],stories:['posts'],email:['email'],ads:['anuncios'],manual:['marca']}[activePreviewKind]||[];
     if(relevant.includes(group))requestAnimationFrame(()=>renderPreviewContent(activePreviewKind));
@@ -191,7 +192,7 @@ async function anotherVersion(){
   const result=sampleGoodVariants(latestDecisions);
   if(!result.changes.length){status.textContent='O Jev não deixou alternativas boas o bastante para sortear.';return;}
   latestDecisions=result.decisions; latestVariation=result.changes;
-  renderAll(latestDecisions,latestCopy,projectV2); refreshProjectButtons();
+  renderAll(latestDecisions,latestCopy,projectV2); renderSiteThumbnail(); refreshProjectButtons();
   const byGroup=Object.groupBy?Object.groupBy(result.changes,c=>c.group):result.changes.reduce((m,c)=>((m[c.group]??=[]).push(c),m),{});
   for(const [group,items] of Object.entries(byGroup)) if(group!=='entender')setSignal(group,`🎲 ${items.length} sorteada(s)`,true);
   let info=null; try{info=await loadQuestionInfo();}catch{}
@@ -204,7 +205,7 @@ async function anotherVersion(){
 function backToJev(){
   if(!latestVariation.length)return;
   const r=restoreJevChoices(latestDecisions);
-  latestDecisions=r.decisions; latestVariation=[]; renderAll(latestDecisions,latestCopy,projectV2);
+  latestDecisions=r.decisions; latestVariation=[]; renderAll(latestDecisions,latestCopy,projectV2); renderSiteThumbnail();
   for(const [group,answers] of Object.entries(latestDecisions)) if(group!=='entender')renderGroupSummary(group,answers);
   refreshProjectButtons(); status.textContent=`Versão do Jev restaurada · ${r.count} escolha(s) voltaram ao 1º lugar.`;
 }
@@ -313,7 +314,7 @@ async function undoTarget(target){
       if(id in (snap.lockedChoices||{}))lockedChoices[id]=snap.lockedChoices[id];else delete lockedChoices[id];
     }
     if(snap.lockedTargets?.[target])lockedTargets[target]=structuredClone(snap.lockedTargets[target]);else delete lockedTargets[target];
-    latestVariation=[];renderAll(latestDecisions,latestCopy,projectV2);renderLocks();refreshProjectButtons();
+    latestVariation=[];renderAll(latestDecisions,latestCopy,projectV2); renderSiteThumbnail();renderLocks();refreshProjectButtons();
     status.textContent=`${prettyId(target)} voltou para a versão anterior.`;return true;
   }
   status.textContent=`Não encontrei uma versão anterior diferente de ${prettyId(target)}.`;return false;
@@ -391,7 +392,7 @@ async function persistStructuralRoute(route){
     const d=await json(`/api/projects/${activeProject.id}`,{method:'PATCH',body:JSON.stringify({v2:projectV2})});
     activeProject=d.project;projectV2=d.project.v2||projectV2;
   }
-  renderAll(latestDecisions,latestCopy,projectV2);
+  renderAll(latestDecisions,latestCopy,projectV2); renderSiteThumbnail();
   selectV2Tab('site');
   commandInput.value='';
   const verbs={add:'criada',edit:'atualizada',remove:'removida',reorder:'reposicionada'};
@@ -438,7 +439,7 @@ async function applyCommand(){
       snapshotStudio('comando',target);
       const changed=applyLibraryAnswers(target,resp.answers);
       await lockTarget(target,`seu comando: ${comando}`);
-      latestVariation=[];renderAll(latestDecisions,latestCopy,projectV2);renderLocks();commandInput.value='';refreshProjectButtons();
+      latestVariation=[];renderAll(latestDecisions,latestCopy,projectV2); renderSiteThumbnail();renderLocks();commandInput.value='';refreshProjectButtons();
       status.textContent=changed?`🎯 ${prettyId(target)} alterado e travado · ${changed} decisão(ões).`:`${prettyId(target)} → o Jev achou que já estava assim; peça travada.`;
       return;
     }
@@ -474,13 +475,13 @@ async function generateCopy(){
       if(event==='inicio') status.textContent=`${String(d.provider||'IA').toUpperCase()} · ${d.model} · ${d.route?.reason||'iniciando…'}`;
       if(event==='tok' && d.fields){
         latestCopy=copyShape(d.fields);
-        renderAll(latestDecisions,latestCopy,projectV2);
+        renderAll(latestDecisions,latestCopy,projectV2); renderSiteThumbnail();
         const n=Object.values(d.fields).filter(Boolean).length;
         status.textContent=`IA escrevendo… ${n}/11 campos`;
       }
       if(event==='fim'){
         latestCopy=copyShape(d.fields||{});
-        renderAll(latestDecisions,latestCopy,projectV2);
+        renderAll(latestDecisions,latestCopy,projectV2); renderSiteThumbnail();
         status.textContent=d.complete?`11 textos prontos · primeira palavra em ${d.first_token_ms??'—'} ms · total ${d.ms} ms`:`IA terminou com ${Object.values(d.fields||{}).filter(Boolean).length}/11 campos.`;
       }
       if(event==='erro') throw Object.assign(new Error(d.error||'Falha da NVIDIA.'),{code:d.code});
@@ -615,6 +616,29 @@ async function generateCompleteKit(){
     status.textContent='Kit base V2 pronto e versionado.';
   }catch(e){kitStatus.textContent='⚠ '+e.message;}finally{confirmGenerateKitBtn.disabled=false;refreshProjectButtons();}
 }
+function renderSiteThumbnail(){
+  const root=document.getElementById('site-preview'); if(!root)return;
+  const hasSite=Object.keys(latestDecisions?.site||{}).length>0;
+  if(!hasSite)return;
+  const frame=document.createElement('iframe');
+  frame.className='site-thumbnail-frame';
+  frame.title='Miniatura real do site';
+  frame.tabIndex=-1;
+  frame.setAttribute('aria-hidden','true');
+  frame.setAttribute('sandbox','allow-same-origin');
+  frame.srcdoc=buildSiteHtml(exportContext());
+  root.replaceChildren(frame);
+  const fit=()=>{
+    const w=root.clientWidth||1,h=root.clientHeight||1;
+    const scale=Math.min(w/1280,h/820);
+    frame.style.transform=`scale(${scale})`;
+    frame.style.left=`${Math.max(0,(w-1280*scale)/2)}px`;
+    frame.style.top=`${Math.max(0,(h-820*scale)/2)}px`;
+  };
+  requestAnimationFrame(fit);
+  frame.addEventListener('load',fit,{once:true});
+}
+
 const PREVIEW_META=Object.freeze({
   site:{title:'Site · Página inicial',selector:'#site-preview',mode:'html'},
   brand:{title:'Marca · Identidade Visual',selector:'#brand-preview',mode:'clone'},
