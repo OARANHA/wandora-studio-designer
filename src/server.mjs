@@ -30,7 +30,7 @@ function loginPage(error = '') {
   <body class="login-body">
     <main class="login-shell">
       <section class="login-hero login-hero-approved" aria-hidden="true">
-        <img class="login-hero-image" src="/brand/login.webp" alt="">
+        <img class="login-hero-image" src="/assets/wandora-login-hero.png?v=20261001-approved1" alt="">
       </section>
       <section class="login-panel">
         <div class="login-lang">◎&nbsp; Português (BR) &nbsp;⌄</div>

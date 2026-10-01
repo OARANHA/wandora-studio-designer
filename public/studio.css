@@ -325,7 +325,7 @@ background-size:22px 22px;background-position:0 0,11px 11px;padding:14px;overflo
   background:
     linear-gradient(90deg,#0b0c0bdd 0 18%,#11120fd1 31%,#15110db8 54%,#2f1c13a5 100%),
     linear-gradient(0deg,#0008,transparent 42%),
-    url('/brand/login.webp') left center/cover no-repeat!important;
+    url('/assets/wandora-login-hero.png?v=20261001-approved1') left center/cover no-repeat!important;
 }
 .dashboard-hero .hero-mascot-wrap{visibility:hidden}
 .site .piece-preview{position:relative;overflow:hidden;background:#080908}
