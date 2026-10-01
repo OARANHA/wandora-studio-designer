@@ -1,7 +1,7 @@
-import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderStories, renderEmail, renderAds, renderManual } from './render.mjs';
-import { sampleGoodVariants, restoreJevChoices } from './variation.mjs';
-import { buildSiteHtml, buildEmailHtml, buildSignatureHtml, buildAdsHtml, buildBrandManualHtml, buildProjectJson, downloadText, slugify } from './export.mjs';
-import { createBackendVoiceCapture, createDecisionScheduler, createSignalCables, mergeTranscriptText } from './live.mjs';
+import { resetPieces, renderAll, renderBrand, renderSite, renderPosts, renderStories, renderEmail, renderAds, renderManual } from './render.mjs?v=20261001-engine3';
+import { sampleGoodVariants, restoreJevChoices } from './variation.mjs?v=20261001-engine3';
+import { buildSiteHtml, buildEmailHtml, buildSignatureHtml, buildAdsHtml, buildBrandManualHtml, buildProjectJson, downloadText, slugify } from './export.mjs?v=20261001-engine3';
+import { createBackendVoiceCapture, createDecisionScheduler, createSignalCables, mergeTranscriptText } from './live.mjs?v=20261001-engine3';
 const $ = (s) => document.querySelector(s);
 const briefing=$('#briefing'), btn=$('#analisar'), status=$('#status'), providers=$('#providers');
 const projectSelect=$('#project-select'), projectName=$('#project-name'), clientName=$('#client-name');
