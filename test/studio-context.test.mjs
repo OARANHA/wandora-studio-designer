@@ -9,7 +9,7 @@ const decisions={
   entender:{
     seg:a('academia'),pers:a('energetica'),pub:a('geral'),obj:a('visitar'),canal:a('presencial'),dif:a('experiencia'),oferta:a('aula'),
   },
-  site:{hero:a('cinema'),titulo:a('nivel'),cta:a('aula')},
+  site:{hero:a('cinema'),titulo:a('nivel'),cta:a('aula'),sec_servicos:{type:'noul',noul:.75},sec_planos:{type:'noul',noul:.56},sec_depoimentos:{type:'noul',noul:.57},sec_sobre:{type:'noul',noul:.72},sec_galeria:{type:'noul',noul:.67},sec_faq:{type:'noul',noul:.66},sec_localizacao:{type:'noul',noul:.62},sec_lead:{type:'noul',noul:.58}},
   marca:{paleta:a('energia'),fonte:a('poster'),slogan:a('energia')},
   posts:{p1_hook:a('conheca'),p2_hook:a('oferta'),p3_hook:a('por_tras')},
   email:{em_assunto:a('primeiro')},
@@ -29,6 +29,8 @@ test('StudioContext usa as decisões do Jev como fonte canônica',()=>{
   assert.equal(ctx.copyFallback.brand.name,'Academia');
   assert.match(ctx.copyFallback.site.headline,/próximo nível/i);
   assert.equal(ctx.media.requests[0].target,'stories.01');
+  assert.deepEqual(ctx.site.sections,['features','pricing','proof','about','gallery','faq','location','lead','cta']);
+  assert.match(ctx.site.content.desc,/Musculação/i);
 });
 
 test('CreativePlan não reinterpreta o nicho quando já existem decisões canônicas',async()=>{
