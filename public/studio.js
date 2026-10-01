@@ -16,7 +16,7 @@ const mediaPrompt=$('#media-prompt'), generateImageBtn=$('#generate-image'), gen
 const generateKitBtn=$('#generate-kit'), kitDialog=$('#kit-dialog'), confirmGenerateKitBtn=$('#confirm-generate-kit'), kitStatus=$('#kit-status');
 const previewDialog=$('#preview-dialog'), previewTitle=$('#preview-title'), previewFrame=$('#preview-frame'), previewClone=$('#preview-clone'), previewCommand=$('#preview-command'), previewApplyBtn=$('#preview-apply'), previewExportBtn=$('#preview-export'), previewCloseBtn=$('#preview-close'), previewMicBtn=$('#preview-mic');
 const pipelineBriefing=$('#pipeline-briefing'), pipelineMaterials=$('#pipeline-materials'), pipelineKit=$('#pipeline-kit'), heroCalloutTitle=$('#hero-callout-title'), heroCalloutText=$('#hero-callout-text');
-let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, chutesImageReady=false, chutesVideoReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[];
+let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, chutesImageReady=false, chutesVideoReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[], lastAutoBriefingMediaKey='';
 let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
 let activePreviewKind='';
 function viewV2(){return {...projectV2,projectId:activeProject?.id||projectV2?.creativePlan?.projectId||''};}
@@ -474,6 +474,54 @@ async function tryStructuralSiteCommand(comando,target='site',tipo='comando_de_e
   const route=await json('/api/v2/site-command',{method:'POST',body:JSON.stringify({command:comando,briefing:briefing.value,current:projectV2.siteStructure||{}})});
   if(!route.ok||route.operation==='none')return false;
   return persistStructuralRoute(route);
+}
+function briefingStoryIntent(text){
+  const s=briefNorm(text);
+  const story=/\b(story|stories|reel|reels)\b/.test(s);
+  const visual=/\b(imagem|foto|fundo|background|fumaca|smoke|desenho|ilustracao|visual|cena|ambiente|academia|clinica|produto|pessoa)\b/.test(s);
+  const ask=/\b(quero|coloca|colocar|gera|gerar|cria|criar|fundo|imagem|foto|fumaca)\b/.test(s);
+  if(!story||!visual||!ask)return null;
+  let n=1;
+  if(/\b(2|02|segundo|segunda)\b/.test(s))n=2;
+  else if(/\b(3|03|terceiro|terceira)\b/.test(s))n=3;
+  return {slot:`stories.${String(n).padStart(2,'0')}`,label:`Story ${n}`};
+}
+async function ensureCreativePlanForStory(text){
+  await ensureActiveProjectForKit();
+  const existing=projectV2?.creativePlan;
+  const hasStory=Array.isArray(existing?.assets)&&existing.assets.some(a=>String(a?.slot||'').startsWith('stories.'));
+  if(hasStory)return existing;
+  const materials=[...new Set([...(existing?.deliverables||projectV2?.materials||[]),'stories'])];
+  status.textContent='Preparando o Story no plano criativo…';
+  const planned=await json('/api/v2/creative-plan',{method:'POST',body:JSON.stringify({
+    projectId:activeProject.id,briefing:text,materials,useJev:true,
+  })});
+  projectV2=planned.v2||{...projectV2,creativePlan:planned.plan,materials,kitStatus:'planning'};
+  activeProject={...activeProject,v2:projectV2};
+  return projectV2.creativePlan;
+}
+async function maybeAutoGenerateBriefingStory(text){
+  const intent=briefingStoryIntent(text);
+  if(!intent||!chutesImageReady)return false;
+  const key=`${activeProject?.id||'new'}|${intent.slot}|${String(text||'').trim()}`;
+  if(key===lastAutoBriefingMediaKey&&projectV2?.creativePlan?.assets?.some(a=>a?.slot===intent.slot&&a?.assetId))return false;
+  const plan=await ensureCreativePlanForStory(text);
+  const item=plan?.assets?.find(a=>a?.slot===intent.slot);
+  if(!item)return false;
+  status.textContent=`Gerando imagem real para ${intent.label}…`;
+  projectV2={...projectV2,kitStatus:'generating'};updatePipeline();
+  const d=await json('/api/v2/media/revise-slot',{method:'POST',body:JSON.stringify({
+    projectId:activeProject.id,slot:intent.slot,instruction:text,
+  })});
+  projectV2={...projectV2,creativePlan:d.plan,briefingFacts:d.plan?.briefingFacts||projectV2.briefingFacts,kitStatus:d.plan?.status==='ready'?'ready':'generating'};
+  activeProject={...activeProject,v2:projectV2};
+  lastAutoBriefingMediaKey=key;
+  renderAll(latestDecisions,latestCopy,viewV2());
+  renderSiteThumbnail();
+  if(previewDialog?.open&&activePreviewKind==='stories')renderPreviewContent('stories');
+  updatePipeline();
+  status.textContent=`✓ ${intent.label} recebeu uma imagem do Chutes e foi atualizado.`;
+  return true;
 }
 function localCreativeMediaIntent(text){
   if(!projectV2?.creativePlan?.assets?.length)return null;
@@ -1152,6 +1200,9 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
           :latestComplete?'89 decisões prontas. Agora clique em “Gerar kit completo” para produzir textos, imagens e composições.':`Canais concluídos com ${failures} erro(s).`;
       }
     });
+    if(latestComplete&&!live){
+      try{await maybeAutoGenerateBriefingStory(texto);}catch(e){status.textContent=`Briefing analisado, mas a imagem do Story falhou: ${e.message}`;}
+    }
   }catch(e){
     if(e.name!=='AbortError')status.textContent=e.message;
   }finally{
