@@ -16,7 +16,7 @@ export function inferStyleModel({prompt='',mediaMode='',archetype='',styleModel=
   const explicit=String(styleModel||'').toLowerCase();
   if(STYLE_MODELS.has(explicit))return explicit;
   const t=norm([prompt,mediaMode,archetype].join(' '));
-  if(/\b(anime|manga|ilustr|illustr|desenho|semi[- ]?real|cartoon|quadrinho)\b/.test(t))return 'ilustmix';
+  if(/anime|manga|ilustr|illustr|desenho|semi[- ]?real|cartoon|quadrinho/.test(t))return 'ilustmix';
   if(/\b(fantasia|fantasy|sci[- ]?fi|surreal|concept art|pintura)\b/.test(t))return 'dreamshaper';
   if(/\b(juggernaut|fotografia classica|photography style|foto editorial)\b/.test(t))return 'juggernaut';
   return 'flux';
@@ -47,7 +47,7 @@ export function fallbackMediaRoute(input={}){
 
   const styleModel=inferStyleModel(input);
   if(String(input.mediaMode||'').toLowerCase()==='illustration'||
-     /\b(ilustr|illustr|desenho|anime|manga|semi[- ]?real|cartoon|concept art)\b/.test(t)){
+     /ilustr|illustr|desenho|anime|manga|semi[- ]?real|cartoon|concept art/.test(t)){
     return {worker:'image_style',styleModel,reason:'explicit_visual_style',source:'rules'};
   }
 
