@@ -151,33 +151,120 @@ export function renderSite(decisions,copy={},v2={}){
   const root=document.getElementById('site-preview'); if(!root)return;
   const d=decisions?.site; if(!d){empty(root,'LANDING PAGE','O site nasce aqui');return;}
   const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
-  const shell=node('div',`site-art site-art--${choice(d.hero)||'split'}`);
-  const nav=node('div','site-nav'); nav.append(node('b','',textCopy(copy,'brand.name',brandFallback(decisions,v2))),node('span','', 'SERVIÇOS  ·  SOBRE  ·  CONTATO'));
+
+  const context=v2?.studioContext?.site||{};
+  const content=context?.content||{};
   const structure=v2?.siteStructure||{hero:{enabled:true,variant:'split'},sections:[]};
-  const heroVariant=structure.hero?.variant||choice(d.hero)||'split';
+  const contextSections=Array.isArray(context?.sections)?context.sections:[];
+  const sections=(Array.isArray(structure.sections)&&structure.sections.length?structure.sections:contextSections.length?contextSections:['features','proof','cta']).filter(Boolean);
+  const heroVariant=structure.hero?.variant||context?.heroDecision||choice(d.hero)||'split';
+  const shell=node('div',`site-art site-mini site-art--${choice(d.hero)||'split'}`);
   shell.classList.add(`site-v2--${String(heroVariant).replaceAll('_','-')}`);
-  if(structure.hero?.enabled!==false){
-    const hero=node('div','site-hero-art'); const copyBox=node('div','site-copy');
-    const title=textCopy(copy,'site.headline',contextCopy(v2,'site.headline',TITLE[choice(d.titulo)]||'Uma marca feita para ser lembrada.'));
-    copyBox.append(node('small','',labelKey(choice(decisions?.entender?.seg)||'negócio')),node('h2','',title),node('p','',textCopy(copy,'site.subheadline',contextCopy(v2,'site.subheadline','Estratégia, personalidade e uma experiência visual coerente do primeiro contato à conversão.'))));
-    const button=node('button','site-cta',textCopy(copy,'site.cta',contextCopy(v2,'site.cta',CTA[choice(d.cta)]||'Conhecer agora'))); button.type='button';
-    copyBox.append(button);
-    const art=node('div',`site-object site-object--${choice(d.img)||'flat'}`);
-    const heroSlot=v2?.creativePlan?.site?.hero?.assetSlot||'site.hero';
-    const heroImage=creativeAssetUrl(v2,heroSlot);
-    if(heroImage){
-      const img=node('img','site-object-media');img.src=heroImage;img.alt='';img.loading='eager';art.append(img);art.classList.add('site-object--generated');
-    }else art.append(node('i'),node('i'),node('i'));
-    if(heroVariant==='mascot_right')art.classList.add('site-object--mascot');
-    if(heroVariant==='dashboard_right')art.classList.add('site-object--dashboard');
-    hero.append(copyBox,art); shell.append(nav,hero);
-  }else shell.append(nav);
-  const sectionLabels={benefits:'Benefícios',proof:'Prova social',features:'Serviços / recursos',process:'Como funciona',gallery:'Galeria',pricing:'Planos / preços',faq:'Perguntas frequentes',lead:'Fale com a gente',cta:'Pronto para começar?',footer:'Rodapé'};
-  for(const id of structure.sections||[]){
-    const sec=node('section',`site-v2-section site-v2-section--${id}`);
-    sec.append(node('small','',id.toUpperCase()),node('strong','',sectionLabels[id]||labelKey(id)),node('span','',id==='faq'?'Perguntas e respostas essenciais para reduzir objeções.':id==='proof'?'Avaliações, números ou clientes que reforçam confiança.':'Bloco estrutural criado pelo comando de voz.'));
-    shell.append(sec);
+
+  const brand=textCopy(copy,'brand.name',contextCopy(v2,'brand.name',brandFallback(decisions,v2)));
+  const sectionLabels={benefits:'Benefícios',proof:'Resultados',features:content?.itemsTitle||'Serviços',process:'Como funciona',gallery:'Galeria',pricing:'Planos',faq:'FAQ',about:'Sobre',numbers:'Números',team:'Equipe',location:'Localização',lead:'Contato',cta:'Contato',footer:'Rodapé'};
+  const navNames=[...new Set(sections.map(id=>sectionLabels[id]).filter(Boolean))].slice(0,4);
+  const nav=node('div','site-nav');
+  const navBrand=node('b','site-nav-brand',brand);
+  const navLinks=node('span','site-nav-links',(navNames.length?navNames:['Início','Serviços','Contato']).join('  ·  '));
+  nav.append(navBrand,navLinks);
+
+  const hero=node('div','site-hero-art');
+  const copyBox=node('div','site-copy');
+  const title=textCopy(copy,'site.headline',contextCopy(v2,'site.headline',TITLE[choice(d.titulo)]||'Uma marca feita para ser lembrada.'));
+  const subtitle=textCopy(copy,'site.subheadline',contextCopy(v2,'site.subheadline',content?.desc||'Uma experiência pensada para transformar interesse em próximo passo.'));
+  copyBox.append(
+    node('small','site-kicker',labelKey(choice(decisions?.entender?.seg)||'negócio')),
+    node('h2','',title),
+    node('p','',subtitle)
+  );
+  const button=node('button','site-cta',textCopy(copy,'site.cta',contextCopy(v2,'site.cta',CTA[choice(d.cta)]||'Conhecer agora'))); button.type='button';
+  copyBox.append(button);
+
+  const art=node('div',`site-object site-object--${choice(d.img)||'flat'}`);
+  const heroSlot=v2?.creativePlan?.site?.hero?.assetSlot||'site.hero';
+  const heroImage=creativeAssetUrl(v2,heroSlot);
+  if(heroImage){
+    const img=node('img','site-object-media');img.src=heroImage;img.alt='';img.loading='eager';art.append(img);art.classList.add('site-object--generated');
+  }else{
+    const wire=node('div','site-object-wire');
+    wire.append(node('i'),node('i'),node('i'));
+    art.append(wire);
   }
+  if(heroVariant==='mascot_right')art.classList.add('site-object--mascot');
+  if(heroVariant==='dashboard_right')art.classList.add('site-object--dashboard');
+
+  if(structure.hero?.enabled!==false)hero.append(copyBox,art);
+  else hero.append(copyBox);
+  shell.append(nav,hero);
+
+  const itemRows=Array.isArray(content?.items)?content.items:[];
+  const benefitRows=Array.isArray(content?.benefits)?content.benefits:[];
+  const stepRows=Array.isArray(content?.steps)?content.steps:[];
+  const faqRows=Array.isArray(content?.faq)?content.faq:[];
+
+  const makeCard=(title,desc='')=>{
+    const card=node('div','site-mini-card');
+    card.append(node('strong','',String(title||'Conteúdo')),node('span','',String(desc||'')));
+    return card;
+  };
+  const makeSection=(id)=>{
+    const sec=node('section',`site-mini-section site-mini-section--${id}`);
+    const head=node('div','site-mini-section-head');
+    head.append(node('small','',String(id).toUpperCase()),node('strong','',sectionLabels[id]||labelKey(id)));
+    sec.append(head);
+
+    if(id==='features'||id==='pricing'){
+      const rows=(itemRows.length?itemRows:[['Opção 1','Benefício principal'],['Opção 2','Diferencial'],['Opção 3','Próximo passo']]).slice(0,3);
+      const grid=node('div','site-mini-grid');
+      rows.forEach(([a,b])=>grid.append(makeCard(a,b)));
+      sec.append(grid);
+    }else if(id==='benefits'){
+      const rows=(benefitRows.length?benefitRows:[['Benefício 1','Valor percebido'],['Benefício 2','Experiência'],['Benefício 3','Resultado']]).slice(0,3);
+      const grid=node('div','site-mini-grid');
+      rows.forEach(([a,b])=>grid.append(makeCard(a,b)));
+      sec.append(grid);
+    }else if(id==='process'){
+      const rows=(stepRows.length?stepRows:[['01','Comece aqui'],['02','Escolha'],['03','Avance']]).slice(0,3);
+      const flow=node('div','site-mini-flow');
+      rows.forEach(([a,b],i)=>{const step=makeCard(a,b);step.dataset.step=String(i+1);flow.append(step);});
+      sec.append(flow);
+    }else if(id==='proof'){
+      const quote=node('div','site-mini-proof');
+      quote.append(node('b','', '“'),node('span','',textCopy(copy,'posts.relationship.title','Experiência que gera confiança.')),node('small','', 'CLIENTE / PROVA SOCIAL'));
+      sec.append(quote);
+    }else if(id==='gallery'){
+      const gallery=node('div','site-mini-gallery');
+      ['stories.01','stories.02','stories.03'].forEach(slot=>{
+        const fig=node('div','site-mini-thumb'); const src=creativeAssetUrl(v2,slot);
+        if(src){const img=node('img');img.src=src;img.alt='';fig.append(img);}else fig.append(node('i'));
+        gallery.append(fig);
+      });
+      sec.append(gallery);
+    }else if(id==='faq'){
+      const faq=node('div','site-mini-faq');
+      (faqRows.length?faqRows:[['Pergunta frequente','Resposta objetiva'],['Outra dúvida','Resposta curta']]).slice(0,2).forEach(([q,a])=>{
+        const row=node('div','site-mini-faq-row');row.append(node('strong','',q),node('span','',a));faq.append(row);
+      });
+      sec.append(faq);
+    }else if(id==='about'||id==='team'||id==='location'||id==='lead'||id==='numbers'){
+      const split=node('div','site-mini-split');
+      split.append(makeCard(sectionLabels[id]||id,content?.about||content?.desc||subtitle),node('div','site-mini-placeholder',''));
+      sec.append(split);
+    }else if(id==='cta'){
+      const band=node('div','site-mini-cta');
+      band.append(node('strong','',textCopy(copy,'brand.slogan',contextCopy(v2,'brand.slogan','Pronto para começar?'))),node('span','',textCopy(copy,'site.cta',contextCopy(v2,'site.cta','Falar com a equipe'))));
+      sec.append(band);
+    }else{
+      sec.append(makeCard(sectionLabels[id]||id,'Bloco do site definido pelo briefing.'));
+    }
+    return sec;
+  };
+
+  sections.slice(0,7).forEach(id=>shell.append(makeSection(id)));
+  const footer=node('div','site-mini-footer');
+  footer.append(node('b','',brand),node('span','',(navNames.length?navNames:['Sobre','Suporte','Contato']).join('  ·  ')));
+  shell.append(footer);
   root.append(shell);
 }
 export function renderPosts(decisions,copy={},v2={}){
@@ -190,10 +277,15 @@ export function renderPosts(decisions,copy={},v2={}){
     textCopy(copy,'posts.relationship.title',contextCopy(v2,'posts.relationship.title',labelKey(choice(d.p3_hook)||'Salve este conteúdo'))),
   ];
   ['APRESENTAÇÃO','VENDA','RELACIONAMENTO'].forEach((kind,i)=>{
-    const c=node('div',`post-card post-card--${i+1}`);
+    const c=node('article',`post-card post-card--${i+1}`);
     const bg=creativeAssetUrl(v2,`stories.${String(i+1).padStart(2,'0')}`)||creativeAssetUrl(v2,'site.hero');
-    if(bg){c.classList.add('post-card--media');c.style.backgroundImage=`linear-gradient(180deg,rgba(6,7,6,.12),rgba(6,7,6,.86)),url("${bg}")`;c.style.backgroundSize='cover';c.style.backgroundPosition='center';}
-    c.append(node('small','',`0${i+1} · ${kind}`),node('strong','',titles[i]),node('span','',`6 lâminas · ${labelKey(choice(d[`p${i+1}_fmt`])||'sequência')}`)); root.append(c);
+    const top=node('div','post-top');top.append(node('small','',`0${i+1} · ${kind}`),node('i','', '1/6'));
+    const media=node('div','post-media');
+    if(bg){const img=node('img');img.src=bg;img.alt='';img.loading='lazy';media.append(img);c.classList.add('post-card--media');}
+    else media.append(node('span','', 'IMAGEM / ARTE'));
+    const body=node('div','post-copy');body.append(node('strong','',titles[i]),node('span','',labelKey(choice(d[`p${i+1}_fmt`])||'sequência')));
+    const foot=node('div','post-footer');foot.append(node('b','', '● ● ● ○ ○ ○'),node('span','', 'CARROSSEL'));
+    c.append(top,media,body,foot);root.append(c);
   });
 }
 export function renderEmail(decisions,copy={},v2={}){
@@ -220,12 +312,16 @@ export function renderStories(decisions,copy={},v2={}){
   const labels={presentation:'APRESENTAÇÃO',offer:'VENDA',authority:'AUTORIDADE',tip:'DICA',testimonial:'PROVA',cta:'CHAMADA',relationship:'RELACIONAMENTO',product:'PRODUTO'};
   defaults.map((fallback,i)=>({...fallback,...(planned[i]||{}),headline:(planned[i]?.headline||fallback.headline)})).forEach((item,i)=>{
     const card=node('article',`story-card story-card--${i+1}`);
+    const progress=node('div','story-progress');
+    for(let p=0;p<3;p++)progress.append(node('i',p===i?'on':''));
     const bg=creativeAssetUrl(v2,item.assetSlot||`stories.${String(i+1).padStart(2,'0')}`);
-    if(bg){card.classList.add('story-card--media');card.style.backgroundImage=`linear-gradient(180deg,rgba(6,7,6,.16),rgba(6,7,6,.82)),url("${bg}")`;card.style.backgroundSize='cover';card.style.backgroundPosition='center';}
+    const media=node('div','story-media');
+    if(bg){const img=node('img');img.src=bg;img.alt='';img.loading='lazy';media.append(img);card.classList.add('story-card--media');}
+    else media.append(node('span','', 'FUNDO 9:16'));
     const top=node('div','story-top'); top.append(node('small','',`0${i+1} · ${labels[item.type]||String(item.type||'STORY').toUpperCase()}`),node('i','',i===1?'▶':'W'));
     const body=node('div','story-body'); body.append(node('strong','',item.headline||fallback.headline),node('span','',item.cta||fallback.cta));
     const foot=node('div','story-foot',String(item.cta||'ENVIAR MENSAGEM').toUpperCase());
-    card.append(top,body,foot); root.append(card);
+    card.append(progress,media,top,body,foot); root.append(card);
   });
 }
 export function renderManual(decisions,copy={},v2={}){
