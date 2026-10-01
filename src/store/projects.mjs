@@ -84,7 +84,7 @@ function cleanV2(value = {}) {
   const raw=value?.siteStructure&&typeof value.siteStructure==='object'?value.siteStructure:{};
   const heroRaw=raw.hero&&typeof raw.hero==='object'?raw.hero:{};
   const variants=new Set(['split','centered','mascot_right','dashboard_right','editorial','illustration','full_background','product','video']);
-  const allowedSections=new Set(['benefits','proof','features','process','gallery','pricing','faq','lead','cta','footer']);
+  const allowedSections=new Set(['benefits','proof','features','process','gallery','pricing','faq','lead','cta','footer','about','numbers','team','location']);
   const siteStructure={
     hero:{enabled:heroRaw.enabled!==false,variant:variants.has(heroRaw.variant)?heroRaw.variant:'split'},
     sections:Array.isArray(raw.sections)?raw.sections.map(x=>cleanText(typeof x==='string'?x:x?.id,40)).filter(x=>allowedSections.has(x)).filter((x,i,a)=>a.indexOf(x)===i).slice(0,12):[],
