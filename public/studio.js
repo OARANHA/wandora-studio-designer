@@ -59,8 +59,7 @@ function extractBriefingFactsLocal(text=''){
   for(const [id,name,hex,aliases] of BRIEFING_COLOR_DEFS){
     let pos=-1;
     for(const aliasRaw of aliases){
-      const alias=briefNorm(aliasRaw).replace(/[.*+?^$()|[\]\\{}]/g,'\\const decisionScheduler=createDecisionScheduler({getText:()=>briefing.value,run:(text,seq)=>runDecisionUpdate(text,seq,{live:micWanted||micListening})});
-').replace(/\s+/g,'\\s+');
+      const alias=briefNorm(aliasRaw).replace(/[.*+?^$()|[\]\\{}]/g,ch=>'\\'+ch).replace(/\s+/g,'\\s+');
       const re=new RegExp('(?:^|[^a-z0-9])('+alias+')(?=$|[^a-z0-9])','g');
       const m=re.exec(raw);if(m){pos=m.index+(m[0].length-m[1].length);break;}
     }
