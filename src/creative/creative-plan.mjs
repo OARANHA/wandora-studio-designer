@@ -1,5 +1,6 @@
 import { jevDecide } from '../ai/jev.mjs';
 import { extractBriefingFacts } from './briefing-facts.mjs';
+import { buildStudioContext } from './studio-context.mjs';
 
 const norm=(v)=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 const compact=(v,max=900)=>String(v||'').replace(/\s+/g,' ').trim().slice(0,max);
@@ -113,16 +114,22 @@ function normalizeMaterials(materials){
   return out.length?[...new Set(out)]:['brand','site','instagram','stories','email','ads'];
 }
 
-export function buildCreativePlanFromSignals({projectId='',briefing='',materials=[],nicheId,archetype,heroComposition,mediaMode}={}){
-  const facts=extractBriefingFacts(briefing);
-  const pickedNiche=NICHE_PACKS[nicheId]?nicheId:detectNicheFallback(briefing);
+export function buildCreativePlanFromSignals({projectId='',briefing='',materials=[],nicheId,archetype,heroComposition,mediaMode,decisions={},studioContext=null}={}){
+  const context=studioContext||buildStudioContext({decisions,briefing});
+  const facts=context?.briefingFacts||extractBriefingFacts(briefing);
+  const contextNiche=context?.creative?.nicheId;
+  const pickedNiche=NICHE_PACKS[nicheId]?nicheId:NICHE_PACKS[contextNiche]?contextNiche:detectNicheFallback(briefing);
   const pack=NICHE_PACKS[pickedNiche]||NICHE_PACKS.general;
-  const pickedArchetype=VISUAL_ARCHETYPES[archetype]?archetype:explicitArchetype(briefing,pack);
-  const hero=heroComposition?{composition:heroComposition,mediaMode:mediaMode||'photography'}:heroIntent(briefing,pickedArchetype);
+  const hinted=context?.creative?.archetypeHint;
+  const pickedArchetype=VISUAL_ARCHETYPES[archetype]?archetype:(VISUAL_ARCHETYPES[hinted]&&pack.archetypes.includes(hinted)?hinted:explicitArchetype(briefing,pack));
+  const contextHero=context?.creative?.heroComposition;
+  const hero=heroComposition?{composition:heroComposition,mediaMode:mediaMode||'photography'}:contextHero?{composition:contextHero,mediaMode:mediaMode||'photography'}:heroIntent(briefing,pickedArchetype);
   const deliverables=normalizeMaterials(materials);
   const assets=[];
   const addAsset=(slot,subject,mode='photography')=>{
     const size=dimensions(slot);
+    const request=context?.media?.requests?.find(r=>r?.target===slot);
+    const requestedSubject=request?.instruction?`${subject}. Explicit user visual request: ${request.instruction}`:subject;
     const workerHint=slot==='site.hero'
       ?(mode==='illustration'?'image_style':'image_quality')
       :slot.startsWith('stories.')?'image_fast':'image_quality';
@@ -139,14 +146,15 @@ export function buildCreativePlanFromSignals({projectId='',briefing='',materials
       required:true,
       auto:true,
       status:'planned',
-      prompt:promptFor({pack,archetype:pickedArchetype,subject,slot,mode,briefing,facts}),
+      prompt:promptFor({pack,archetype:pickedArchetype,subject:requestedSubject,slot,mode,briefing,facts}),
       negativePrompt:'text, typography, logo, watermark, distorted anatomy, duplicated objects',
       width:size.width,height:size.height,aspect:size.aspect,
       assetId:null,contentUrl:null,error:null,
     });
   };
   if(deliverables.includes('site'))addAsset('site.hero',pack.subject,hero.mediaMode==='video'?'photography':hero.mediaMode);
-  const storyItems=storyCopy(pack).map((item,i)=>({...item,composition:'story-photo-overlay',assetSlot:`stories.${String(i+1).padStart(2,'0')}`}));
+  const contextStories=Array.isArray(context?.social?.stories)?context.social.stories:[];
+  const storyItems=storyCopy(pack).map((item,i)=>({...item,...(contextStories[i]||{}),composition:'story-photo-overlay',assetSlot:(contextStories[i]?.assetSlot||`stories.${String(i+1).padStart(2,'0')}`)}));
   if(deliverables.includes('stories')){
     storyItems.forEach((item,i)=>addAsset(item.assetSlot,pack.storySubjects[i]||pack.subject,'photography'));
   }
@@ -164,6 +172,7 @@ export function buildCreativePlanFromSignals({projectId='',briefing='',materials
       tone:pack.tone,
     },
     briefingFacts:facts,
+    studioContext:context,
     brand:{
       archetype:pickedArchetype,
       archetypeLabel:VISUAL_ARCHETYPES[pickedArchetype]?.label||pickedArchetype,
@@ -215,12 +224,25 @@ const CREATIVE_QUESTIONS=Object.freeze({
   },
 });
 
-export async function planCreativeProject({projectId='',briefing='',materials=[],useJev=true}={}){
-  const fallbackNiche=detectNicheFallback(briefing);
+export async function planCreativeProject({projectId='',briefing='',materials=[],useJev=true,decisions={},brandName='',studioContext=null}={}){
+  const context=studioContext||buildStudioContext({decisions,briefing,brandName});
+  const fallbackNiche=NICHE_PACKS[context?.creative?.nicheId]?context.creative.nicheId:detectNicheFallback(briefing);
   const fallbackPack=NICHE_PACKS[fallbackNiche]||NICHE_PACKS.general;
-  let signals={nicheId:fallbackNiche,archetype:explicitArchetype(briefing,fallbackPack),...heroIntent(briefing,explicitArchetype(briefing,fallbackPack))};
+  const contextArchetype=context?.creative?.archetypeHint;
+  const baseArchetype=VISUAL_ARCHETYPES[contextArchetype]&&fallbackPack.archetypes.includes(contextArchetype)?contextArchetype:explicitArchetype(briefing,fallbackPack);
+  const explicitHero=heroIntent(briefing,baseArchetype);
+  const explicitMedia=/desenho|ilustracao|ilustrad|illustration|video|film|cinemat|produto|embalagem|lata|oculos|relogio/i.test(norm(briefing));
+  let signals={
+    nicheId:fallbackNiche,
+    archetype:baseArchetype,
+    heroComposition:explicitMedia?explicitHero.composition:(context?.creative?.heroComposition||explicitHero.composition),
+    mediaMode:explicitMedia?explicitHero.mediaMode:'photography',
+  };
   let trace=null;
-  if(useJev){
+  const hasCanonical=!!decisions?.entender?.seg?.choice&&!!decisions?.marca&&!!decisions?.site;
+  if(hasCanonical){
+    trace={model:null,canonical:true};
+  }else if(useJev){
     try{
       const decided=await jevDecide({
         state:{
@@ -241,6 +263,7 @@ export async function planCreativeProject({projectId='',briefing='',materials=[]
       trace={model:null,fallback:true};
     }
   }
-  const plan=buildCreativePlanFromSignals({projectId,briefing,materials,...signals});
-  return {...plan,planner:{source:trace?.fallback?'fallback':trace?'jev+rules':'rules',model:trace?.model||null}};
+  const plan=buildCreativePlanFromSignals({projectId,briefing,materials,decisions,studioContext:context,...signals});
+  const source=trace?.canonical?'canonical-decisions':trace?.fallback?'fallback':trace?'jev+rules':'rules';
+  return {...plan,planner:{source,model:trace?.model||null}};
 }
