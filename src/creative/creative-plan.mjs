@@ -117,12 +117,12 @@ function normalizeMaterials(materials){
 export function buildCreativePlanFromSignals({projectId='',briefing='',materials=[],nicheId,archetype,heroComposition,mediaMode,decisions={},studioContext=null}={}){
   const context=studioContext||buildStudioContext({decisions,briefing});
   const facts=context?.briefingFacts||extractBriefingFacts(briefing);
-  const contextNiche=context?.creative?.nicheId;
-  const pickedNiche=NICHE_PACKS[nicheId]?nicheId:NICHE_PACKS[contextNiche]?contextNiche:detectNicheFallback(briefing);
+  const contextNiche=decisions?.entender?.seg?.choice?context?.creative?.nicheId:null;
+  const pickedNiche=NICHE_PACKS[nicheId]?nicheId:(contextNiche&&NICHE_PACKS[contextNiche])?contextNiche:detectNicheFallback(briefing);
   const pack=NICHE_PACKS[pickedNiche]||NICHE_PACKS.general;
-  const hinted=context?.creative?.archetypeHint;
+  const hinted=decisions?.entender?.pers?.choice?context?.creative?.archetypeHint:null;
   const pickedArchetype=VISUAL_ARCHETYPES[archetype]?archetype:(VISUAL_ARCHETYPES[hinted]&&pack.archetypes.includes(hinted)?hinted:explicitArchetype(briefing,pack));
-  const contextHero=context?.creative?.heroComposition;
+  const contextHero=decisions?.site?.hero?.choice?context?.creative?.heroComposition:null;
   const hero=heroComposition?{composition:heroComposition,mediaMode:mediaMode||'photography'}:contextHero?{composition:contextHero,mediaMode:mediaMode||'photography'}:heroIntent(briefing,pickedArchetype);
   const deliverables=normalizeMaterials(materials);
   const assets=[];
