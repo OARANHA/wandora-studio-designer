@@ -45,7 +45,10 @@ function cleanCreativePlan(value) {
       prompt:String(a?.prompt||'').trim().slice(0,2200),negativePrompt:String(a?.negativePrompt||'').trim().slice(0,1200),
       width:Math.min(1536,Math.max(256,Number(a?.width)||1024)),height:Math.min(1536,Math.max(256,Number(a?.height)||1024)),aspect:cleanText(a?.aspect,20),
       assetId:/^[0-9a-f-]{36}$/i.test(String(a?.assetId||''))?String(a.assetId):null,
+      previousAssetId:/^[0-9a-f-]{36}$/i.test(String(a?.previousAssetId||''))?String(a.previousAssetId):null,
       contentUrl:String(a?.contentUrl||'').startsWith('/api/projects/')?String(a.contentUrl).slice(0,360):null,
+      revisionCount:Math.min(999,Math.max(0,Number(a?.revisionCount)||0)),
+      lastInstruction:cleanText(a?.lastInstruction,900)||null,
       error:cleanText(a?.error,300)||null,
     })).filter(a=>a.id&&a.slot);
   } else plan.assets=[];

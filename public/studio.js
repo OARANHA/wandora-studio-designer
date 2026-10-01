@@ -412,11 +412,51 @@ async function tryStructuralSiteCommand(comando,target='site',tipo='comando_de_e
   if(!route.ok||route.operation==='none')return false;
   return persistStructuralRoute(route);
 }
+function localCreativeMediaIntent(text){
+  if(!projectV2?.creativePlan?.assets?.length)return null;
+  const s=String(text||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const change=/\b(troca|trocar|muda|mudar|substitui|substituir|refaz|refazer|gera|gerar|coloca|colocar|quero|deixa|deixar)\b/.test(s);
+  const visual=/\b(imagem|foto|fundo|desenho|ilustracao|visual|cena|ambiente|pessoa|mulher|homem|produto|oculos|relogio|parede|academia|clinica)\b/.test(s);
+  if(!change||!visual)return null;
+  if(/\b(hero|topo|primeira\s+dobra|banner\s+principal)\b/.test(s))return {slot:'site.hero',label:'Hero'};
+  if(/\b(story|stories|reel|reels)\b/.test(s)){
+    let n=1;
+    if(/\b(2|02|segundo|segunda)\b/.test(s))n=2;
+    else if(/\b(3|03|terceiro|terceira)\b/.test(s))n=3;
+    else if(/\b(1|01|primeiro|primeira)\b/.test(s))n=1;
+    const slot=`stories.${String(n).padStart(2,'0')}`;
+    if(projectV2.creativePlan.assets.some(a=>a?.slot===slot))return {slot,label:`Story ${n}`};
+  }
+  return null;
+}
+async function tryCreativeMediaCommand(comando){
+  const intent=localCreativeMediaIntent(comando);
+  if(!intent)return false;
+  if(!activeProject)return false;
+  if(!chutesImageReady){
+    status.textContent=`Entendi a mudança visual em ${intent.label}, mas o Chutes de imagem ainda não está conectado neste servidor.`;
+    return true;
+  }
+  status.textContent=`Diretor Criativo revisando ${intent.label}…`;
+  const d=await json('/api/v2/media/revise-slot',{method:'POST',body:JSON.stringify({
+    projectId:activeProject.id,slot:intent.slot,instruction:comando,
+  })});
+  projectV2={...projectV2,creativePlan:d.plan,kitStatus:d.plan?.status==='ready'?'ready':'generating'};
+  activeProject={...activeProject,v2:projectV2};
+  latestVariation=[];
+  renderAll(latestDecisions,latestCopy,viewV2());renderSiteThumbnail();renderLocks();
+  commandInput.value='';
+  if(previewDialog?.open)renderPreviewContent(activePreviewKind);
+  status.textContent=`✨ ${intent.label} recriado · ${d.route?.model||d.route?.provider||'IA'} → Chutes.`;
+  return true;
+}
+
 async function applyCommand(){
   const comando=commandInput.value.trim();
   if(comando.split(/\s+/).length<2){status.textContent='Digite o que quer mudar em algumas palavras.';return;}
   commandBusy=true;refreshProjectButtons();status.textContent=`Entendendo “${comando}”…`;
   try{
+    if(await tryCreativeMediaCommand(comando))return;
     if(await tryStructuralSiteCommand(comando))return;
     if(!latestComplete){status.textContent='Para ajustes de identidade, conclua primeiro a análise do briefing.';return;}
     const atuais=await currentChoiceLabels();

@@ -267,6 +267,66 @@ const server = http.createServer(async (req, res) => {
       const saved=await updateProject(session.email,projectId,{briefing:briefingText,v2:nextV2});
       return sendJson(res,200,{ok:true,plan:saved.v2?.creativePlan||plan,v2:saved.v2});
     }
+    if (path === '/api/v2/media/revise-slot' && req.method === 'POST') {
+      const body=await readJson(req,80_000);
+      const projectId=String(body.projectId||'');
+      const slot=String(body.slot||'').trim().slice(0,100);
+      const instruction=String(body.instruction||'').replace(/\s+/g,' ').trim().slice(0,900);
+      if(!slot||instruction.split(/\s+/).filter(Boolean).length<2) throw new HttpError(400,'Informe o slot e a mudança visual.','media_revision_required');
+      const project=await getProject(session.email,projectId);
+      const plan=project.v2?.creativePlan&&typeof project.v2.creativePlan==='object'?structuredClone(project.v2.creativePlan):null;
+      if(!plan||!Array.isArray(plan.assets)) throw new HttpError(409,'Este projeto ainda não possui plano criativo.','creative_plan_missing');
+      const item=plan.assets.find(a=>a?.slot===slot);
+      if(!item) throw new HttpError(404,'Slot visual não encontrado no plano criativo.','creative_slot_missing');
+
+      const routed=await routeModel({
+        task:'creative_plan',
+        mode:String(project.modelRouting?.mode||'auto'),
+        preferredKey:String(project.modelRouting?.selections?.creative_plan||''),
+        context:`${item.prompt||''}\nREVISÃO: ${instruction}`.slice(0,1800),
+      });
+      const worker=routed.selected;
+      const messages=[
+        {role:'system',content:'You are a senior art director and image prompt editor. Rewrite the existing commercial image prompt in English, applying the requested revision while preserving brand style, composition purpose, aspect-ratio intent and negative-space needs. Do not add typography, logos or watermarks. Return only the final image-generation prompt, no markdown.'},
+        {role:'user',content:`EXISTING PROMPT:\n${String(item.prompt||'').slice(0,3200)}\n\nREQUESTED REVISION:\n${instruction}`},
+      ];
+      const promptResult=worker.provider==='chutes'
+        ? await chutesChat({messages,model:worker.id,temperature:0.35,top_p:0.9,max_tokens:420,stream:false})
+        : await nvidiaChat({messages,model:worker.id,temperature:0.35,top_p:0.9,max_tokens:420,stream:false});
+      const revised=String(promptResult?.choices?.[0]?.message?.content||promptResult?.choices?.[0]?.text||'').replace(/^\s*[`"']+|[`"']+\s*$/g,'').trim();
+      if(revised.length<20) throw new HttpError(502,'O diretor de arte não devolveu um prompt utilizável.','creative_prompt_empty');
+
+      const controller=new AbortController(); res.on('close',()=>controller.abort());
+      const media=await generateChutesImage({
+        prompt:revised,
+        negativePrompt:item.negativePrompt,
+        width:item.width,
+        height:item.height,
+        signal:controller.signal,
+      });
+      const safeSlot=slot.replace(/[^a-z0-9_.-]+/gi,'-').replaceAll('.','-').slice(0,80);
+      const asset=await putAsset({
+        owner:session.email,projectId,role:item.role||'generated-image',
+        originalName:`${safeSlot}-v${Date.now()}.png`,contentType:media.contentType,buffer:media.body,
+      });
+      item.previousAssetId=item.assetId||null;
+      item.assetId=asset.id;
+      item.contentUrl=`/api/projects/${projectId}/assets/${asset.id}/content`;
+      item.prompt=revised.slice(0,2200);
+      item.status='attached';
+      item.error=null;
+      item.revisionCount=Math.min(999,(Number(item.revisionCount)||0)+1);
+      item.lastInstruction=instruction;
+      plan.status=plan.assets.some(a=>a.required!==false&&!a.assetId)?'partial':'ready';
+      plan.progress={
+        total:plan.assets.length,
+        ready:plan.assets.filter(a=>a.assetId).length,
+        failed:plan.assets.filter(a=>a.status==='failed').length,
+      };
+      const nextV2={...(project.v2||{}),creativePlan:plan,kitStatus:plan.status==='ready'?'ready':'generating'};
+      const saved=await updateProject(session.email,projectId,{v2:nextV2});
+      return sendJson(res,201,{ok:true,slot,asset,plan:saved.v2?.creativePlan||plan,route:{provider:worker.provider,model:worker.id,reason:routed.reason}});
+    }
     if (path === '/api/v2/media/image' && req.method === 'POST') {
       const body=await readJson(req,50_000);
       const projectId=String(body.projectId||'');

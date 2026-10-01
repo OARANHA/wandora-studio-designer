@@ -50,7 +50,7 @@ function providerModel({provider,id,label,input=['text'],output=['text'],strengt
   return {provider,id,label:label||id,input,output,strengths,speed,cost,configured,source,key:`${provider}:${id}`};
 }
 function nvidiaModel(){
-  return providerModel({provider:'nvidia',id:config.nvidia.model,label:config.nvidia.model,input:['text'],output:['text'],strengths:['briefing','copy','brand','layout','review'],speed:'fast',cost:'medium',configured:!!config.nvidia.apiKey,source:'runtime'});
+  return providerModel({provider:'nvidia',id:config.nvidia.model,label:config.nvidia.model,input:['text'],output:['text'],strengths:['intent','briefing','creative_plan','copy','brand','layout','review'],speed:'fast',cost:'medium',configured:!!config.nvidia.apiKey,source:'runtime'});
 }
 async function chutesModels(){
   if(!config.chutes.apiKey)return [];

@@ -64,17 +64,38 @@ async function invoke(url,payload,{signal,kind,timeoutMs}){
 export async function generateChutesImage({prompt,negativePrompt='',width=1024,height=1024,signal}={}){
   const url=requireMedia('image'),text=String(prompt||'').trim();
   if(text.length<4)throw new HttpError(400,'Descreva a imagem que deseja gerar.','prompt_required');
-  return invoke(url,{
-    prompt:text.slice(0,4000),
-    negative_prompt:String(negativePrompt||'').slice(0,1600),
-    width:Math.min(1536,Math.max(256,Number(width)||1024)),
-    height:Math.min(1536,Math.max(256,Number(height)||1024)),
-    num_inference_steps:28,guidance_scale:6.5,
-  },{signal,kind:'image',timeoutMs:180000});
+  const w=Math.min(1536,Math.max(256,Number(width)||1024));
+  const h=Math.min(1536,Math.max(256,Number(height)||1024));
+  const isQwen=/qwen-image/i.test(`${config.chutes.imageModel} ${url}`);
+  const isZImage=/z-image/i.test(`${config.chutes.imageModel} ${url}`);
+  const payload={prompt:text.slice(0,4000),width:w,height:h,seed:Math.floor(Math.random()*2147483647)};
+  if(isQwen){
+    payload.negative_prompt=String(negativePrompt||'').slice(0,1600);
+    payload.true_cfg_scale=4;
+    payload.num_inference_steps=30;
+  }else if(isZImage){
+    payload.guidance_scale=0;
+    payload.num_inference_steps=9;
+  }else{
+    payload.negative_prompt=String(negativePrompt||'').slice(0,1600);
+    payload.guidance_scale=6.5;
+    payload.num_inference_steps=28;
+  }
+  return invoke(url,payload,{signal,kind:'image',timeoutMs:180000});
 }
 export async function generateChutesVideo({prompt,resolution='1280*720',frames=81,fps=24,signal}={}){
   const url=requireMedia('video'),text=String(prompt||'').trim();
   if(text.length<4)throw new HttpError(400,'Descreva o vídeo que deseja gerar.','prompt_required');
+  const isLtx=/ltx/i.test(`${config.chutes.videoModel} ${url}`);
+  if(isLtx){
+    const raw=String(resolution||'1280*720').match(/(\d+)\D+(\d+)/);
+    const width=Math.min(1920,Math.max(256,Number(raw?.[1])||768));
+    const height=Math.min(1088,Math.max(256,Number(raw?.[2])||512));
+    return invoke(url,{
+      prompt:text.slice(0,4000),width,height,duration:Math.max(3,Math.min(8,(Number(frames)||81)/(Number(fps)||24))),
+      fps:Math.min(30,Math.max(8,Number(fps)||24)),generate_audio:false,guidance_scale:3.1,
+    },{signal,kind:'video',timeoutMs:300000});
+  }
   return invoke(url,{
     prompt:text.slice(0,4000),
     resolution:String(resolution||'1280*720').slice(0,30),

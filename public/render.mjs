@@ -163,7 +163,7 @@ export function renderSite(decisions,copy={},v2={}){
   }
   root.append(shell);
 }
-export function renderPosts(decisions,copy={}){
+export function renderPosts(decisions,copy={},v2={}){
   const root=document.getElementById('posts-preview'); if(!root)return;
   const d=decisions?.posts; if(!d){empty(root,'CARROSSÉIS','3 histórias em 18 lâminas');return;}
   const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
@@ -173,7 +173,10 @@ export function renderPosts(decisions,copy={}){
     textCopy(copy,'posts.relationship.title',labelKey(choice(d.p3_hook)||'Salve este conteúdo')),
   ];
   ['APRESENTAÇÃO','VENDA','RELACIONAMENTO'].forEach((kind,i)=>{
-    const c=node('div',`post-card post-card--${i+1}`); c.append(node('small','',`0${i+1} · ${kind}`),node('strong','',titles[i]),node('span','',`6 lâminas · ${labelKey(choice(d[`p${i+1}_fmt`])||'sequência')}`)); root.append(c);
+    const c=node('div',`post-card post-card--${i+1}`);
+    const bg=creativeAssetUrl(v2,`stories.${String(i+1).padStart(2,'0')}`)||creativeAssetUrl(v2,'site.hero');
+    if(bg){c.classList.add('post-card--media');c.style.backgroundImage=`linear-gradient(180deg,rgba(6,7,6,.12),rgba(6,7,6,.86)),url("${bg}")`;c.style.backgroundSize='cover';c.style.backgroundPosition='center';}
+    c.append(node('small','',`0${i+1} · ${kind}`),node('strong','',titles[i]),node('span','',`6 lâminas · ${labelKey(choice(d[`p${i+1}_fmt`])||'sequência')}`)); root.append(c);
   });
 }
 export function renderEmail(decisions,copy={}){
@@ -224,14 +227,17 @@ export function renderManual(decisions,copy={},v2={}){
   guide.append(swatches,rules);shell.append(cover,guide);root.append(shell);
 }
 
-export function renderAds(decisions,copy={}){
+export function renderAds(decisions,copy={},v2={}){
   const root=document.getElementById('ads-preview'); if(!root)return;
   const d=decisions?.anuncios; if(!d){empty(root,'300×250','6 formatos de display');return;}
   const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
   const ad=node('div',`ad-art ad-art--${choice(d.ad_estilo)||'tipografico'}`);
+  const reuse=v2?.creativePlan?.ads?.reuseSlot||'site.hero';
+  const bg=creativeAssetUrl(v2,reuse)||creativeAssetUrl(v2,'stories.01');
+  if(bg){ad.classList.add('ad-art--media');ad.style.backgroundImage=`linear-gradient(135deg,rgba(7,8,7,.2),rgba(7,8,7,.88)),url("${bg}")`;ad.style.backgroundSize='cover';ad.style.backgroundPosition='center';}
   ad.append(node('small','',labelKey(choice(d.ad_conceito)||'campanha')),node('strong','',textCopy(copy,'ads.headline',labelKey(choice(d.ad_titulo)||'Uma oferta para você'))),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(decisions?.marca?.slogan)]||'Marca, produto e chamada em sintonia.')));
   const b=node('button','ad-cta',textCopy(copy,'ads.cta',CTA[choice(d.ad_cta)]||'Saiba mais'));b.type='button';ad.append(b);root.append(ad);
 }
 export function renderAll(decisions={},copy={},v2={}){
-  renderBrand(decisions,copy); renderSite(decisions,copy,v2); renderPosts(decisions,copy); renderStories(decisions,copy,v2); renderEmail(decisions,copy); renderAds(decisions,copy); renderManual(decisions,copy,v2);
+  renderBrand(decisions,copy); renderSite(decisions,copy,v2); renderPosts(decisions,copy,v2); renderStories(decisions,copy,v2); renderEmail(decisions,copy); renderAds(decisions,copy,v2); renderManual(decisions,copy,v2);
 }
