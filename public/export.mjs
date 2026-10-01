@@ -13,7 +13,9 @@ export function downloadText(filename,text,type='text/plain;charset=utf-8'){
   const a=document.createElement('a'); a.href=url; a.download=filename; a.hidden=true;
   document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
-function palette(decisions={}){
+function palette(decisions={},v2={}){
+  const explicit=v2?.briefingFacts?.palette||v2?.creativePlan?.brand?.palette;
+  if(Array.isArray(explicit)&&explicit.length>=5&&explicit.every(x=>/^#[0-9a-f]{6}$/i.test(String(x||''))))return explicit.slice(0,5);
   const key=choice(decisions?.marca?.paleta);
   const maps={
     rock:['#141414','#e23b2e','#f4efd9','#86867f','#f4c430'], luxo:['#0f0f10','#c7a45b','#f5f0e5','#5d5d61','#2a2117'],
@@ -23,7 +25,7 @@ function palette(decisions={}){
   };
   return maps[key] || maps.mono;
 }
-function brandName(project,copy){ return clean(get(copy,'brand.name'), project?.clientName || project?.name || 'Nova Marca'); }
+function brandName(project,copy,v2={},decisions={}){ const planned=clean(v2?.creativePlan?.business?.label).split('/')[0].trim(); const seg=clean(choice(decisions?.entender?.seg)).replaceAll('_',' '); return clean(get(copy,'brand.name'), project?.clientName || planned || seg || 'Sua marca'); }
 function slogan(copy){ return clean(get(copy,'brand.slogan'),'Uma marca feita para ser lembrada.'); }
 function headline(copy){ return clean(get(copy,'site.headline'),'Uma experiência feita para o seu próximo passo.'); }
 function subheadline(copy){ return clean(get(copy,'site.subheadline'),'Estratégia, identidade e comunicação reunidas em uma experiência consistente.'); }
@@ -39,7 +41,7 @@ function creativeAssetUrl(project,v2={},slot=''){
 }
 
 export function buildSiteHtml({project,decisions={},copy={},v2={}}={}){
-  const p=palette(decisions), name=brandName(project,copy), title=headline(copy), sub=subheadline(copy);
+  const p=palette(decisions,v2), name=brandName(project,copy,v2,decisions), title=headline(copy), sub=subheadline(copy);
   const businessLabel=clean(v2?.creativePlan?.business?.label,'negócio');
   const about=clean(copy.about,`Conheça uma experiência de ${businessLabel.toLowerCase()} pensada para unir clareza, confiança e um atendimento consistente.`);
   const posts=['presentation','sales','relationship'].map(k=>clean(get(copy,`posts.${k}.title`),'Conteúdo que aproxima'));
@@ -76,16 +78,16 @@ export function buildSiteHtml({project,decisions={},copy={},v2={}}={}){
 <style>:root{--p1:${p[0]};--p2:${p[1]};--p3:${p[2]};--p4:${p[3]};--p5:${p[4]}}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--p3);color:var(--p1)}a{color:inherit}.wrap{width:min(1120px,calc(100% - 40px));margin:auto}.nav{display:flex;justify-content:space-between;align-items:center;padding:22px 0;font-weight:800}.nav span{opacity:.65;font-size:13px}.hero{min-height:72vh;display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center}.hero h1{font-size:clamp(44px,8vw,96px);line-height:.92;letter-spacing:-.055em;margin:14px 0}.hero p{font-size:clamp(17px,2vw,22px);line-height:1.55;max-width:680px}.hero--centered{grid-template-columns:1fr;text-align:center}.hero--centered .hero-copy{display:flex;flex-direction:column;align-items:center}.hero--centered .art{display:none}.hero--editorial h1{font-family:Georgia,serif;font-weight:500;max-width:10ch}.cta{display:inline-block;margin-top:18px;background:var(--p2);color:var(--p1);padding:15px 22px;border-radius:999px;text-decoration:none;font-weight:900}.cta-light{background:var(--p3)}.art{aspect-ratio:1;border-radius:34px;background:radial-gradient(circle at 30% 30%,var(--p5),transparent 35%),linear-gradient(135deg,var(--p2),var(--p4));box-shadow:0 30px 80px #0002;position:relative;overflow:hidden;display:grid;place-items:center}.art--media img{width:100%;height:100%;object-fit:cover;display:block}.hero--full_background{position:relative;min-height:76vh;grid-template-columns:1fr;overflow:hidden;border-radius:34px;margin-top:26px;margin-bottom:26px;color:#fff;padding:clamp(32px,7vw,84px)}.hero--full_background .art{position:absolute;inset:0;z-index:-2;border-radius:0;aspect-ratio:auto}.hero--full_background .art:after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#080908dc 0%,#0809088c 46%,#08090828 78%)}.hero--full_background .hero-copy{max-width:720px}.hero--illustration .art,.hero--product .art{border-radius:28px}.hero--video .art{border-radius:28px}.art b{font-size:clamp(84px,13vw,170px);color:var(--p1);position:relative;z-index:2}.hero--mascot_right .art{border-radius:44% 44% 35% 35%;box-shadow:inset 0 0 0 18px #0002,0 30px 80px #0003}.hero--dashboard_right .art b{font:900 18px ui-monospace,monospace}.hero--dashboard_right .art b:after{content:'  KPI 98%  ↗';white-space:pre}.art i{position:absolute;border-radius:50%;background:var(--p3);width:22%;aspect-ratio:1}.art i:nth-of-type(1){right:8%;bottom:8%}.art i:nth-of-type(2){left:10%;top:9%;background:var(--p1);opacity:.3}section{padding:76px 0;border-top:1px solid color-mix(in srgb,var(--p1) 18%,transparent)}h2{font-size:clamp(30px,5vw,54px);margin:8px 0 24px}section small{font:800 11px ui-monospace,monospace;color:var(--p2);letter-spacing:.12em}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.card{padding:28px;border:1px solid color-mix(in srgb,var(--p1) 16%,transparent);border-radius:22px;background:color-mix(in srgb,var(--p3) 88%,white)}.card b{display:block;font-size:22px;margin-bottom:10px}.band{background:var(--p1);color:var(--p3)}.band .wrap{padding-top:30px;padding-bottom:30px}.gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.gallery i{display:block;aspect-ratio:4/3;border-radius:22px;background:linear-gradient(135deg,var(--p1),var(--p2))}.gallery figure{margin:0;aspect-ratio:4/3;border-radius:22px;overflow:hidden;background:var(--p1)}.gallery img{width:100%;height:100%;object-fit:cover;display:block}.faq{display:grid;gap:10px}.faq details{padding:18px 20px;border:1px solid color-mix(in srgb,var(--p1) 16%,transparent);border-radius:16px}.faq summary{font-weight:800;cursor:pointer}.faq p{line-height:1.5}.prefooter .wrap{display:flex;justify-content:space-between;gap:20px}.footer{padding:36px 0;font-size:13px;opacity:.7}@media(max-width:760px){.hero{grid-template-columns:1fr;min-height:auto;padding:60px 0}.art{max-width:440px}.grid,.gallery{grid-template-columns:1fr}}</style></head>
 <body><header class="wrap nav"><strong>${esc(name)}</strong><span>SOBRE · SERVIÇOS · CONTATO</span></header><main>${hero}${body}</main><footer class="wrap footer">${esc(name)} · criado no Wandora Studio Designer</footer></body></html>`;
 }
-export function buildSignatureHtml({project,copy={}}={}){
-  const name=brandName(project,copy), person=clean(get(copy,'email.signature'),'Equipe de atendimento');
+export function buildSignatureHtml({project,copy={},v2={},decisions={}}={}){
+  const name=brandName(project,copy,v2,decisions), person=clean(get(copy,'email.signature'),'Equipe de atendimento');
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="font-family:Arial,sans-serif;color:#1f2024"><tr><td style="padding-right:14px;border-right:3px solid #1f2024"><strong style="font-size:20px">${esc(name)}</strong></td><td style="padding-left:14px"><div style="font-weight:700">${esc(person)}</div><div style="font-size:12px;color:#666;margin-top:4px">Relacionamento e atendimento</div></td></tr></table>`;
 }
-export function buildEmailHtml({project,decisions={},copy={}}={}){
-  const p=palette(decisions), name=brandName(project,copy), subject=clean(get(copy,'email.subject'),'Uma novidade para você'), pre=clean(get(copy,'email.preheader'),'Uma mensagem criada especialmente para você.'), body=clean(get(copy,'email.preview'),subheadline(copy));
+export function buildEmailHtml({project,decisions={},copy={},v2={}}={}){
+  const p=palette(decisions,v2), name=brandName(project,copy,v2,decisions), subject=clean(get(copy,'email.subject'),'Uma novidade para você'), pre=clean(get(copy,'email.preheader'),'Uma mensagem criada especialmente para você.'), body=clean(get(copy,'email.preview'),subheadline(copy));
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(subject)}</title></head><body style="margin:0;background:#f1f1ee"><div style="display:none;max-height:0;overflow:hidden">${esc(pre)}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f1ee"><tr><td align="center" style="padding:32px 12px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#fff;border-collapse:collapse"><tr><td style="padding:24px 28px;background:${p[0]};color:${p[2]};font-family:Arial,sans-serif;font-weight:800">${esc(name)}</td></tr><tr><td style="padding:46px 34px;font-family:Arial,sans-serif;color:#1f2024"><div style="font-size:13px;color:#666;margin-bottom:10px">${esc(pre)}</div><h1 style="font-size:38px;line-height:1.05;margin:0 0 18px">${esc(subject)}</h1><p style="font-size:17px;line-height:1.6;margin:0 0 26px">${esc(body)}</p><a href="#" style="display:inline-block;background:${p[1]};color:${p[2]};padding:13px 20px;text-decoration:none;font-weight:800;border-radius:6px">Saiba mais</a></td></tr><tr><td style="padding:28px 34px;border-top:1px solid #eee">${buildSignatureHtml({project,copy})}</td></tr></table></td></tr></table></body></html>`;
 }
-export function buildAdsHtml({project,decisions={},copy={}}={}){
-  const p=palette(decisions), name=brandName(project,copy), head=clean(get(copy,'ads.headline'),headline(copy));
+export function buildAdsHtml({project,decisions={},copy={},v2={}}={}){
+  const p=palette(decisions,v2), name=brandName(project,copy,v2,decisions), head=clean(get(copy,'ads.headline'),headline(copy));
   const sizes=[[300,250],[728,90],[160,600],[300,600],[320,50],[970,250]];
   const cards=sizes.map(([w,h],i)=>`<section><h2>${w}×${h}</h2><div class="ad" style="width:${w}px;height:${h}px"><small>${esc(name)}</small><strong>${esc(head)}</strong><span>Saiba mais</span></div></section>`).join('');
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kit de anúncios · ${esc(name)}</title><style>:root{--p1:${p[0]};--p2:${p[1]};--p3:${p[2]}}*{box-sizing:border-box}body{margin:0;padding:28px;font-family:Arial,sans-serif;background:#efefec;color:#222}section{overflow:auto;margin:0 0 32px;padding-bottom:10px}h2{font:700 13px ui-monospace,monospace}.ad{position:relative;overflow:hidden;padding:8%;display:flex;flex-direction:column;justify-content:center;background:linear-gradient(135deg,var(--p1),var(--p2));color:var(--p3);border:1px solid #0002}.ad:after{content:'';position:absolute;width:45%;aspect-ratio:1;border-radius:50%;background:var(--p3);opacity:.12;right:-10%;top:-20%}.ad small{font-weight:800;letter-spacing:.08em}.ad strong{font-size:clamp(14px,4cqw,42px);line-height:.95;margin:8px 0;max-width:82%}.ad span{font-size:12px;font-weight:800}</style></head><body><h1>Kit de banners · ${esc(name)}</h1>${cards}</body></html>`;
@@ -95,7 +97,7 @@ export function buildProjectJson({project,decisions={},copy={},locks={},history=
 }
 
 export function buildBrandManualHtml({project,decisions={},copy={},v2={}}={}){
-  const p=palette(decisions), name=brandName(project,copy), tag=slogan(copy);
+  const p=palette(decisions,v2), name=brandName(project,copy,v2,decisions), tag=slogan(copy);
   const font=clean(choice(decisions?.marca?.fonte),'Tipografia definida pelo Studio');
   const logoStyle=clean(choice(decisions?.marca?.estilo),'Sistema principal');
   const icon=clean(choice(decisions?.marca?.icone),'símbolo');
