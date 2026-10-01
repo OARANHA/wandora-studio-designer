@@ -19,7 +19,10 @@ const pipelineBriefing=$('#pipeline-briefing'), pipelineMaterials=$('#pipeline-m
 let activeController=null, copyController=null, activeProject=null, latestDecisions={}, latestCopy={}, latestComplete=false, nvidiaReady=false, chutesReady=false, chutesImageReady=false, chutesVideoReady=false, writerReady=false, copyGenerating=false, latestVariation=[], questionInfo=null, commandBusy=false, lockedChoices={}, lockedTargets={}, commandHistory=[], lastAutoBriefingMediaKey='';
 let modelCatalog=[], modelTasks={}, modelRouting={mode:'auto',selections:{}}, assetItems=[], projectV2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,studioContext:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
 let activePreviewKind='';
-function viewV2(){return {...projectV2,projectId:activeProject?.id||projectV2?.creativePlan?.projectId||''};}
+function viewV2(){
+  const liveFacts=extractBriefingFactsLocal(briefing?.value||'');
+  return {...projectV2,briefingFacts:liveFacts.explicitColors?liveFacts:projectV2.briefingFacts,projectId:activeProject?.id||projectV2?.creativePlan?.projectId||''};
+}
 const liveTranscript=$('#live-transcript'), transcriptFinal=$('#transcript-final'), transcriptInterim=$('#transcript-interim'), briefingLabel=briefing.closest('.screen-label'), vuEl=$('.mic-row .vu');
 const voiceDiag=$('#voice-diag'), voiceStages=Object.fromEntries([...voiceDiag.querySelectorAll('[data-stage]')].map(el=>[el.dataset.stage,el]));
 let micListening=false, micWanted=false, micBaseText='', micFinalText='', micInterimText='', voiceCapture=null, voiceSession=0, liveUpdateCount=0;
@@ -82,15 +85,32 @@ async function refreshStudioContext(text=briefing.value){
     decisions:latestDecisions,
     brandName:activeProject?.clientName||'',
   })});
+  const liveFacts=extractBriefingFactsLocal(text);
   projectV2={
     ...projectV2,
     studioContext:d.context,
-    briefingFacts:d.context?.briefingFacts||projectV2.briefingFacts,
+    briefingFacts:liveFacts.explicitColors?liveFacts:(d.context?.briefingFacts||projectV2.briefingFacts),
   };
-  renderAll(latestDecisions,latestCopy,viewV2());
-  renderSiteThumbnail();
-  if(previewDialog?.open)renderPreviewContent(activePreviewKind);
+  try{renderAll(latestDecisions,latestCopy,viewV2());}catch(e){console.error('renderAll/context',e);}
+  try{renderSiteThumbnail();}catch(e){console.error('renderSite/context',e);}
+  if(previewDialog?.open){try{renderPreviewContent(activePreviewKind);}catch(e){console.error('preview/context',e);}}
   return d.context;
+}
+let decisionFinalizeKey='';
+async function finalizeDecisionState(text,{autoStory=false}={}){
+  const finalCount=Object.values(latestDecisions).reduce((n,g)=>n+Object.keys(g||{}).length,0);
+  if(finalCount!==89)return false;
+  latestComplete=true;
+  refreshProjectButtons();
+  const key=String(text||'').trim()+'|'+finalCount;
+  if(decisionFinalizeKey===key)return true;
+  decisionFinalizeKey=key;
+  try{await refreshStudioContext(text);}catch(e){status.textContent='89 decisões recebidas, mas o contexto falhou: '+e.message;return true;}
+  refreshProjectButtons();
+  if(autoStory){
+    try{await maybeAutoGenerateBriefingStory(text);}catch(e){status.textContent='Briefing analisado, mas a imagem do Story falhou: '+e.message;}
+  }
+  return true;
 }
 function setPipelineState(el,state,label){if(!el)return;el.dataset.state=state;const i=el.querySelector('i'),s=el.querySelector('span');if(i)i.textContent=state==='done'?'✓':state==='working'?'◌':'○';if(s&&label)s.textContent=label;}
 function updatePipeline(){
@@ -1209,6 +1229,12 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
         setChannel(d.group,'done'); renderGroupSummary(d.group,answers,d.ms);
         if(d.group!=='entender')cables.arrive(d.group);
         status.textContent=live?`🎙️ Ouvindo… ${d.group} atualizado (${d.ms||0} ms).`:`${d.group}: ${n} decisões recebidas.`;
+        const accumulated=Object.values(latestDecisions).reduce((sum,g)=>sum+Object.keys(g||{}).length,0);
+        if(accumulated===89&&!latestComplete){
+          latestComplete=true;
+          refreshProjectButtons();
+          queueMicrotask(()=>finalizeDecisionState(texto,{autoStory:!live}));
+        }
       } else if(event==='group_error'){
         failures+=1; setChannel(d.group,'error'); setSignal(d.group,d.code||'erro',false); status.textContent=d.error;
       } else if(event==='done'){
@@ -1216,28 +1242,22 @@ async function runDecisionUpdate(texto,seq,{live=false}={}){
         $('#latencia').textContent=`${total} ms`;
         const decisionCount=Number(d.decisionCount)||Object.values(latestDecisions).reduce((n,g)=>n+Object.keys(g||{}).length,0);
         latestComplete=decisionCount===89;
+        const liveFacts=extractBriefingFactsLocal(texto);
         if(d.context&&typeof d.context==='object'){
           projectV2={
             ...projectV2,
             studioContext:d.context,
-            briefingFacts:d.context.briefingFacts||projectV2.briefingFacts,
+            briefingFacts:liveFacts.explicitColors?liveFacts:(d.context.briefingFacts||projectV2.briefingFacts),
           };
-          renderAll(latestDecisions,latestCopy,viewV2());
-          renderSiteThumbnail();
-          if(previewDialog?.open)renderPreviewContent(activePreviewKind);
         }
-        liveUpdateCount+=latestComplete?1:0; refreshProjectButtons(); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
+        liveUpdateCount+=latestComplete?1:0; refreshProjectButtons();
+        if(latestComplete)queueMicrotask(()=>finalizeDecisionState(texto,{autoStory:!live})); voiceStage('jev',latestComplete?'ok':'error',latestComplete?'89 decisões recebidas':'Falha parcial no Jev');
         status.textContent=live&&micWanted
           ?`🎙️ Ouvindo… ${decisionCount} decisões atualizadas em ${total} ms · atualização ${liveUpdateCount}. Continue falando.`
           :latestComplete?'89 decisões prontas. Agora clique em “Gerar kit completo” para produzir textos, imagens e composições.':`Recebi ${decisionCount}/89 decisões; ${failures} canal(is) com erro.`;
       }
     });
-    if(Object.keys(latestDecisions).length&&!projectV2.studioContext){
-      try{await refreshStudioContext(texto);}catch(e){status.textContent=`Decisões recebidas, mas o contexto do Studio falhou: ${e.message}`;}
-    }
-    if(latestComplete&&!live){
-      try{await maybeAutoGenerateBriefingStory(texto);}catch(e){status.textContent=`Briefing analisado, mas a imagem do Story falhou: ${e.message}`;}
-    }
+    await finalizeDecisionState(texto,{autoStory:!live});
   }catch(e){
     if(e.name!=='AbortError')status.textContent=e.message;
   }finally{
