@@ -33,6 +33,16 @@ function cleanModelRouting(value = {}) {
   }
   return {mode,selections};
 }
+function cleanBriefingFacts(value) {
+  if(!value || typeof value!=='object' || Array.isArray(value))return {colors:[],palette:[],explicitColors:false};
+  const colors=Array.isArray(value.colors)?value.colors.slice(0,4).map(x=>({
+    id:cleanText(x?.id,40),
+    name:cleanText(x?.name,60),
+    hex:/^#[0-9a-f]{6}$/i.test(String(x?.hex||''))?String(x.hex).toLowerCase():'',
+  })).filter(x=>x.id&&x.name&&x.hex):[];
+  const palette=Array.isArray(value.palette)?value.palette.slice(0,5).map(x=>String(x||'').toLowerCase()).filter(x=>/^#[0-9a-f]{6}$/i.test(x)):[];
+  return {colors,palette,explicitColors:colors.length>0};
+}
 function cleanCreativePlan(value) {
   if(!value || typeof value!=='object' || Array.isArray(value))return null;
   const raw=safeJsonSize(value,140_000,'Plano criativo');
@@ -71,7 +81,8 @@ function cleanV2(value = {}) {
     sections:Array.isArray(raw.sections)?raw.sections.map(x=>cleanText(typeof x==='string'?x:x?.id,40)).filter(x=>allowedSections.has(x)).filter((x,i,a)=>a.indexOf(x)===i).slice(0,12):[],
   };
   const creativePlan=cleanCreativePlan(value?.creativePlan);
-  return {kitStatus,materials,siteStructure,creativePlan};
+  const briefingFacts=cleanBriefingFacts(value?.briefingFacts||creativePlan?.briefingFacts);
+  return {kitStatus,materials,siteStructure,creativePlan,briefingFacts};
 }
 async function readJsonFile(path, fallback) {
   try { return JSON.parse(await readFile(path, 'utf8')); }
@@ -110,7 +121,7 @@ export async function createProject({ owner, name, clientName = '', briefing = '
     const now = new Date().toISOString();
     const project = {
       id: randomUUID(), owner, name: projectName, clientName: cleanText(clientName, 120),
-      briefing: String(briefing ?? '').trim().slice(0, 5000), modelRouting:{mode:'auto',selections:{}}, v2:{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null}, createdAt: now, updatedAt: now, versionCount: 0,
+      briefing: String(briefing ?? '').trim().slice(0, 5000), modelRouting:{mode:'auto',selections:{}}, v2:{kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}}, createdAt: now, updatedAt: now, versionCount: 0,
     };
     doc.projects.push(project);
     await atomicJson(INDEX, doc);
@@ -143,7 +154,7 @@ export async function updateProject(owner, id, patch = {}) {
     if ('modelRouting' in patch) next.modelRouting = cleanModelRouting(patch.modelRouting);
     if ('v2' in patch) next.v2 = cleanV2(patch.v2);
     if (!next.modelRouting) next.modelRouting={mode:'auto',selections:{}};
-    if (!next.v2) next.v2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null};
+    if (!next.v2) next.v2={kitStatus:'draft',materials:[],siteStructure:{hero:{enabled:true,variant:'split'},sections:[]},creativePlan:null,briefingFacts:{colors:[],palette:[],explicitColors:false}};
     next.updatedAt = new Date().toISOString();
     doc.projects[i] = next;
     await atomicJson(INDEX, doc);
