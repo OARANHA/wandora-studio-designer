@@ -85,9 +85,19 @@ const SLOGAN = {
 function choice(a){ return a?.choice ?? null; }
 function score(a){ const n=Number(a?.score); return Number.isFinite(n)?n:null; }
 function labelKey(v){ return String(v||'').replaceAll('_',' ').replace(/\b\w/g,m=>m.toUpperCase()); }
-function palette(decisions){
+function palette(decisions,v2={}){
+  const explicit=v2?.briefingFacts?.palette||v2?.creativePlan?.brand?.palette;
+  if(Array.isArray(explicit)&&explicit.length>=5&&explicit.every(x=>/^#[0-9a-f]{6}$/i.test(String(x||'')))){
+    return {key:'briefing',colors:explicit.slice(0,5)};
+  }
   const key=choice(decisions?.marca?.paleta);
   return {key:key||'mono', colors:PALETTES[key]||PALETTES.mono};
+}
+function brandFallback(decisions,v2={}){
+  const planned=String(v2?.creativePlan?.business?.label||'').split('/')[0].trim();
+  if(planned)return planned;
+  const seg=choice(decisions?.entender?.seg);
+  return seg?labelKey(seg):'Sua marca';
 }
 function textCopy(copy,path,fallback){
   let cur=copy;
@@ -118,13 +128,13 @@ export function resetPieces(){
   const defs=[['site-preview','LANDING PAGE','O site nasce aqui'],['posts-preview','CARROSSÉIS','3 histórias em 18 lâminas'],['brand-preview','MARCA','Logo, paleta e fontes'],['email-preview','E-MAIL','Template + assinatura'],['ads-preview','300×250','6 formatos de display'],['stories-preview','9:16','Stories derivados da campanha'],['manual-preview','BRAND BOOK','Logo, cores, tipo e aplicações']];
   for(const [id,a,b] of defs){const root=document.getElementById(id); if(root)empty(root,a,b);}
 }
-export function renderBrand(decisions,copy={}){
+export function renderBrand(decisions,copy={},v2={}){
   const root=document.getElementById('brand-preview'); if(!root)return;
   const d=decisions?.marca; if(!d){empty(root,'MARCA','Logo, paleta e fontes');return;}
-  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
+  const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const card=node('div','brand-card'); const top=node('div','brand-lockup');
   const mark=node('div',`brand-mark brand-mark--${choice(d.forma)||'circulo'}`,(choice(d.icone)||'W').slice(0,1).toUpperCase());
-  const naming=node('div','brand-name'); naming.append(node('strong','',textCopy(copy,'brand.name','NOVA MARCA')),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(d.slogan)]||labelKey(choice(d.slogan)||'identidade viva'))));
+  const naming=node('div','brand-name'); naming.append(node('strong','',textCopy(copy,'brand.name',brandFallback(decisions,v2))),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(d.slogan)]||labelKey(choice(d.slogan)||'identidade viva'))));
   top.append(mark,naming);
   const swatches=node('div','brand-swatches'); colors.forEach(c=>{const s=node('i');s.style.background=c;s.title=c;swatches.append(s);});
   const meta=node('div','brand-meta'); meta.append(node('span','',`logo · ${labelKey(choice(d.estilo)||'clássico')}`),node('span','',`fonte · ${labelKey(choice(d.fonte)||'editorial')}`));
@@ -133,9 +143,9 @@ export function renderBrand(decisions,copy={}){
 export function renderSite(decisions,copy={},v2={}){
   const root=document.getElementById('site-preview'); if(!root)return;
   const d=decisions?.site; if(!d){empty(root,'LANDING PAGE','O site nasce aqui');return;}
-  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
+  const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const shell=node('div',`site-art site-art--${choice(d.hero)||'split'}`);
-  const nav=node('div','site-nav'); nav.append(node('b','',textCopy(copy,'brand.name','MARCA')),node('span','', 'SERVIÇOS  ·  SOBRE  ·  CONTATO'));
+  const nav=node('div','site-nav'); nav.append(node('b','',textCopy(copy,'brand.name',brandFallback(decisions,v2))),node('span','', 'SERVIÇOS  ·  SOBRE  ·  CONTATO'));
   const structure=v2?.siteStructure||{hero:{enabled:true,variant:'split'},sections:[]};
   const heroVariant=structure.hero?.variant||choice(d.hero)||'split';
   shell.classList.add(`site-v2--${String(heroVariant).replaceAll('_','-')}`);
@@ -166,7 +176,7 @@ export function renderSite(decisions,copy={},v2={}){
 export function renderPosts(decisions,copy={},v2={}){
   const root=document.getElementById('posts-preview'); if(!root)return;
   const d=decisions?.posts; if(!d){empty(root,'CARROSSÉIS','3 histórias em 18 lâminas');return;}
-  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
+  const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const titles=[
     textCopy(copy,'posts.presentation.title',labelKey(choice(d.p1_hook)||'Conheça a marca')),
     textCopy(copy,'posts.sales.title',labelKey(choice(d.p2_hook)||'Oferta em destaque')),
@@ -179,21 +189,21 @@ export function renderPosts(decisions,copy={},v2={}){
     c.append(node('small','',`0${i+1} · ${kind}`),node('strong','',titles[i]),node('span','',`6 lâminas · ${labelKey(choice(d[`p${i+1}_fmt`])||'sequência')}`)); root.append(c);
   });
 }
-export function renderEmail(decisions,copy={}){
+export function renderEmail(decisions,copy={},v2={}){
   const root=document.getElementById('email-preview'); if(!root)return;
   const d=decisions?.email; if(!d){empty(root,'E-MAIL','Template + assinatura');return;}
-  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
-  const mail=node('div','email-art'); const bar=node('div','email-bar'); bar.append(node('b','',textCopy(copy,'brand.name','MARCA')),node('span','',labelKey(choice(d.em_tipo)||'newsletter')));
+  const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
+  const mail=node('div','email-art'); const bar=node('div','email-bar'); bar.append(node('b','',textCopy(copy,'brand.name',brandFallback(decisions,v2))),node('span','',labelKey(choice(d.em_tipo)||'newsletter')));
   const body=node('div','email-body');
   body.append(node('small','','ASSUNTO'),node('strong','',textCopy(copy,'email.subject',labelKey(choice(d.em_assunto)||'Uma novidade para você'))),node('p','',textCopy(copy,'email.preview','Uma mensagem curta, clara e consistente com a nova identidade da marca.')));
   const b=node('button','email-cta',textCopy(copy,'email.cta',CTA[choice(d.em_cta)]||'Saiba mais')); b.type='button'; body.append(b);
-  const sig=node('div','email-signature'); sig.append(node('i','', (textCopy(copy,'brand.name','W')).slice(0,1)),node('span','',textCopy(copy,'email.signature','Equipe · relacionamento e atendimento')));
+  const sig=node('div','email-signature'); sig.append(node('i','', (textCopy(copy,'brand.name',brandFallback(decisions,v2))).slice(0,1)),node('span','',textCopy(copy,'email.signature','Equipe · relacionamento e atendimento')));
   mail.append(bar,body,sig); root.append(mail);
 }
 export function renderStories(decisions,copy={},v2={}){
   const root=document.getElementById('stories-preview'); if(!root)return;
   const d=decisions?.posts; if(!d){empty(root,'9:16','Stories derivados da campanha');return;}
-  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
+  const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const planned=Array.isArray(v2?.creativePlan?.stories?.items)?v2.creativePlan.stories.items:[];
   const defaults=[
     {type:'presentation',headline:textCopy(copy,'posts.presentation.title','Conheça a marca'),cta:'Toque para conhecer',assetSlot:'stories.01'},
@@ -214,7 +224,7 @@ export function renderStories(decisions,copy={},v2={}){
 export function renderManual(decisions,copy={},v2={}){
   const root=document.getElementById('manual-preview'); if(!root)return;
   const d=decisions?.marca; if(!d){empty(root,'BRAND BOOK','Logo, cores, tipo e aplicações');return;}
-  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
+  const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const shell=node('div','manual-art');
   const cover=node('div','manual-cover');
   cover.append(node('small','','MANUAL DE MARCA'),node('strong','',textCopy(copy,'brand.name','NOVA MARCA')),node('span','',textCopy(copy,'brand.slogan',SLOGAN[choice(d.slogan)]||'Identidade que trabalha como sistema.')));
@@ -230,7 +240,7 @@ export function renderManual(decisions,copy={},v2={}){
 export function renderAds(decisions,copy={},v2={}){
   const root=document.getElementById('ads-preview'); if(!root)return;
   const d=decisions?.anuncios; if(!d){empty(root,'300×250','6 formatos de display');return;}
-  const {colors}=palette(decisions); setPalette(root,colors); root.replaceChildren();
+  const {colors}=palette(decisions,v2); setPalette(root,colors); root.replaceChildren();
   const ad=node('div',`ad-art ad-art--${choice(d.ad_estilo)||'tipografico'}`);
   const reuse=v2?.creativePlan?.ads?.reuseSlot||'site.hero';
   const bg=creativeAssetUrl(v2,reuse)||creativeAssetUrl(v2,'stories.01');
@@ -239,5 +249,5 @@ export function renderAds(decisions,copy={},v2={}){
   const b=node('button','ad-cta',textCopy(copy,'ads.cta',CTA[choice(d.ad_cta)]||'Saiba mais'));b.type='button';ad.append(b);root.append(ad);
 }
 export function renderAll(decisions={},copy={},v2={}){
-  renderBrand(decisions,copy); renderSite(decisions,copy,v2); renderPosts(decisions,copy,v2); renderStories(decisions,copy,v2); renderEmail(decisions,copy); renderAds(decisions,copy,v2); renderManual(decisions,copy,v2);
+  renderBrand(decisions,copy,v2); renderSite(decisions,copy,v2); renderPosts(decisions,copy,v2); renderStories(decisions,copy,v2); renderEmail(decisions,copy,v2); renderAds(decisions,copy,v2); renderManual(decisions,copy,v2);
 }
