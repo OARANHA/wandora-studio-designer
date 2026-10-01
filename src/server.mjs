@@ -355,7 +355,7 @@ const server = http.createServer(async (req, res) => {
       const safeSlot=slot.replace(/[^a-z0-9_.-]+/gi,'-').replaceAll('.','-').slice(0,80);
       const ext=media.contentType==='image/png'?'png':media.contentType==='image/webp'?'webp':'jpg';
       const asset=await putAsset({
-        owner:session.email,projectId,role:item.role||'generated-image',
+        owner:session.email,projectId,role:'generated-image',
         originalName:safeSlot+'-'+Date.now()+'.'+ext,contentType:media.contentType,buffer:media.body,
       });
 
@@ -433,7 +433,7 @@ const server = http.createServer(async (req, res) => {
       const safeSlot=slot.replace(/[^a-z0-9_.-]+/gi,'-').replaceAll('.','-').slice(0,80);
       const ext=media.contentType==='image/png'?'png':'jpg';
       const asset=await putAsset({
-        owner:session.email,projectId,role:item.role||'generated-image',
+        owner:session.email,projectId,role:'generated-image',
         originalName:`${safeSlot}-v${Date.now()}.${ext}`,contentType:media.contentType,buffer:media.body,
       });
       item.previousAssetId=item.assetId||null;
@@ -478,7 +478,7 @@ const server = http.createServer(async (req, res) => {
       });
       const ext=media.contentType==='image/png'?'png':'jpg';
       const asset=await putAsset({
-        owner:session.email,projectId,role:String(body.role||'generated-image').slice(0,50),
+        owner:session.email,projectId,role:'generated-image',
         originalName:`imagem-ia-${Date.now()}.${ext}`,contentType:media.contentType,buffer:media.body,
       });
       return sendJson(res,201,{ok:true,asset,provider:'chutes',route:{
@@ -502,7 +502,7 @@ const server = http.createServer(async (req, res) => {
       });
       const ext=media.contentType==='image/png'?'png':'jpg';
       const asset=await putAsset({
-        owner:session.email,projectId,role:'generated-image-edit',
+        owner:session.email,projectId,role:'generated-image',
         originalName:`imagem-editada-${Date.now()}.${ext}`,contentType:media.contentType,buffer:media.body,
       });
       return sendJson(res,201,{ok:true,asset,provider:'chutes',route:{worker:media.worker,model:media.model,reason:'explicit_image_edit'}});
