@@ -246,6 +246,28 @@ const server = http.createServer(async (req, res) => {
       if(briefingText.split(/\s+/).filter(Boolean).length<2) throw new HttpError(400,'Descreva o negócio antes de criar o plano criativo.','creative_plan_briefing_required');
       const materials=Array.isArray(body.materials)?body.materials:(project.v2?.materials||[]);
       const plan=await planCreativeProject({projectId,briefing:briefingText,materials,useJev:body.useJev!==false});
+      const previousAssets=Array.isArray(project.v2?.creativePlan?.assets)?project.v2.creativePlan.assets:[];
+      if(Array.isArray(plan.assets)&&previousAssets.length){
+        for(const item of plan.assets){
+          const old=previousAssets.find(a=>a?.slot===item?.slot&&a?.assetId);
+          if(!old)continue;
+          Object.assign(item,{
+            assetId:old.assetId,
+            contentUrl:old.contentUrl||item.contentUrl||null,
+            status:old.status==='failed'?'attached':(old.status||'attached'),
+            mediaWorker:old.mediaWorker||item.mediaWorker||null,
+            mediaModel:old.mediaModel||item.mediaModel||null,
+            styleModel:old.styleModel||item.styleModel||null,
+            routeReason:old.routeReason||item.routeReason||null,
+            revisionCount:Number(old.revisionCount)||0,
+          });
+        }
+        plan.progress={
+          total:plan.assets.length,
+          ready:plan.assets.filter(a=>a?.assetId).length,
+          failed:plan.assets.filter(a=>a?.status==='failed').length,
+        };
+      }
       const heroMap={
         'hero-split-image':'split',
         'hero-full-background':'full_background',
